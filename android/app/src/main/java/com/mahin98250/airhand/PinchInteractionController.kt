@@ -34,6 +34,7 @@ internal class PinchInteractionController(
         require(minimumConfidence in 0f..1f)
     }
 
+    @Synchronized
     fun update(
         isPinching: Boolean,
         x: Float,
@@ -85,8 +86,10 @@ internal class PinchInteractionController(
         return null
     }
 
+    @Synchronized
     fun isActive(): Boolean = active
 
+    @Synchronized
     fun reset() {
         active = false
         startedAtMs = 0L
