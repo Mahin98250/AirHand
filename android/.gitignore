@@ -1,0 +1,2 @@
+# Retrieved during the build from the pinned official MediaPipe model URL.
+/app/src/main/assets/hand_landmarker.task
