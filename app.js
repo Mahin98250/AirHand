@@ -524,6 +524,18 @@ function trackFrame(now) {
     }
     $("gesture").textContent = "No hand detected";
     $("gestureConfidence").textContent = "Keep your hand in view";
+    if (calibrationRun) {
+      const remaining = Math.max(0, 5 - (now - calibrationRun.startedAt) / 1000);
+      if (remaining > 0) {
+        $("gestureConfidence").textContent = "Calibration waiting for hand · " + remaining.toFixed(1) + "s";
+      } else {
+        calibrationRun = null;
+        $("calibrate").disabled = false;
+        $("calibrate").textContent = "Calibrate cursor";
+        $("gestureConfidence").textContent = "No hand captured — show your index finger and try again";
+        showToast("Calibration stopped because no hand was detected.");
+      }
+    }
   }
 
   fpsFrames++;
