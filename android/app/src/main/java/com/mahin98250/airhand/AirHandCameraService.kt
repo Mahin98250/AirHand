@@ -46,9 +46,7 @@ class AirHandCameraService : LifecycleService() {
     private var lastTapAtMs = 0L
     private var lastLongPressAtMs = 0L
     private val pinchInteraction = PinchInteractionController()
-    private var openPalmWristY: Float? = null
-    private var openPalmWristX: Float? = null
-    private var lastScrollAtMs = 0L
+    private val openPalmController = OpenPalmGestureController()
     private val backHoldGate = GestureHoldGate()
     private val homeHoldGate = GestureHoldGate()
     private val recentsHoldGate = GestureHoldGate()
@@ -193,49 +191,25 @@ class AirHandCameraService : LifecycleService() {
                             }
                         }
 
-                        // Open palm is an explicit scroll mode: move the whole hand vertically.
-                        // A threshold and cooldown prevent tiny tremors from repeatedly scrolling.
-                        if (reading.stable && reading.gesture == "OpenPalm" &&
-                            GestureCommandRouter.mayDispatchNavigation(confidence = reading.confidence)) {
-                            val wristY = landmarks[0].y
-                            val wristX = landmarks[0].x
-                            val previousY = openPalmWristY
-                            val previousX = openPalmWristX
-                            val now = System.currentTimeMillis()
-                            if (previousY != null && previousX != null &&
-                                now - lastScrollAtMs >= SCROLL_COOLDOWN_MS) {
-                                val deltaY = wristY - previousY
-                                val deltaX = wristX - previousX
-                                // Pick the dominant axis so diagonal movement doesn't trigger two actions.
-                                if (kotlin.math.abs(deltaX) >= HORIZONTAL_SWIPE_THRESHOLD &&
-                                    kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY)) {
-                                    val action = if (deltaX < 0f)
-                                        AirHandAccessibilityService.NavigationAction.SWIPE_LEFT
-                                    else AirHandAccessibilityService.NavigationAction.SWIPE_RIGHT
-                                    mainHandler.post {
-                                        AirHandAccessibilityService.instance?.performNavigation(action, reading.confidence)
-                                    }
-                                    lastScrollAtMs = now
-                                    openPalmWristX = wristX
-                                    openPalmWristY = wristY
-                                } else if (kotlin.math.abs(deltaY) >= SCROLL_THRESHOLD) {
-                                    val action = if (deltaY < 0f)
-                                        AirHandAccessibilityService.NavigationAction.SCROLL_DOWN
-                                    else AirHandAccessibilityService.NavigationAction.SCROLL_UP
-                                    mainHandler.post {
-                                        AirHandAccessibilityService.instance?.performNavigation(action, reading.confidence)
-                                    }
-                                    lastScrollAtMs = now
-                                    openPalmWristX = wristX
-                                    openPalmWristY = wristY
-                                }
-                            } else if (previousY == null || previousX == null) {
-                                openPalmWristY = wristY
-                                openPalmWristX = wristX
+                        // Open-palm movement uses a tested dominant-axis controller.
+                        val openPalmAction = openPalmController.update(
+                            isOpenPalm = reading.stable && reading.gesture == "OpenPalm" &&
+                                GestureCommandRouter.mayDispatchNavigation(confidence = reading.confidence),
+                            wristX = landmarks[0].x,
+                            wristY = landmarks[0].y,
+                            nowMs = System.currentTimeMillis()
+                        )
+                        openPalmAction?.let { action ->
+                            val mapped = when (action) {
+                                OpenPalmAction.SCROLL_UP -> AirHandAccessibilityService.NavigationAction.SCROLL_UP
+                                OpenPalmAction.SCROLL_DOWN -> AirHandAccessibilityService.NavigationAction.SCROLL_DOWN
+                                OpenPalmAction.SWIPE_LEFT -> AirHandAccessibilityService.NavigationAction.SWIPE_LEFT
+                                OpenPalmAction.SWIPE_RIGHT -> AirHandAccessibilityService.NavigationAction.SWIPE_RIGHT
                             }
-                        } else {
-                            openPalmWristY = null
-                            openPalmWristX = null
+                            val confidence = reading.confidence
+                            mainHandler.post {
+                                AirHandAccessibilityService.instance?.performNavigation(mapped, confidence)
+                            }
                         }
 
                         // Long-hold navigation is one-shot. A pose must be released and re-formed
@@ -325,8 +299,7 @@ class AirHandCameraService : LifecycleService() {
     }
 
     private fun resetNavigationGestureState() {
-        openPalmWristY = null
-        openPalmWristX = null
+        openPalmController.reset()
         backHoldGate.reset()
         homeHoldGate.reset()
         recentsHoldGate.reset()
