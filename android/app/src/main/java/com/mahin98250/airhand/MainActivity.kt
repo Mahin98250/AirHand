@@ -198,7 +198,7 @@ class MainActivity : AppCompatActivity() {
         ))
         content.addView(heading(
             "For chatting, enable and choose AirHand Gesture Keyboard, then tap the text field and use its keys or Voice key. Review the message and tap Send yourself; AirHand never sends it automatically. " +
-                "A persistent notification always offers Stop while system-wide mode is active. Secure screens and restricted apps may block control.",
+                "The persistent notification offers Pause and Stop while system-wide mode is active. Pause disables gesture actions while leaving camera tracking visible. Secure screens and restricted apps may block control.",
             14f
         ))
         scroll.addView(content)
