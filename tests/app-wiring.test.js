@@ -12,23 +12,23 @@ test("every statically referenced UI ID exists in index.html", () => {
   assert.deepEqual(missing, [], "Missing HTML IDs: " + missing.join(", "));
 });
 
-test("the external AI runtime loads only after the page controls are wired", () => {
-  assert.doesNotMatch(app, /^import .*https:\\/\\/cdn\\.jsdelivr\\.net/m);
-  assert.match(app, /await import\\("https:\\/\\/cdn\\.jsdelivr\\.net\\/@mediapipe\\/tasks-vision/);
-  assert.match(app, /Camera access requires HTTPS or localhost/);
+test("the page does not statically import the external AI CDN", () => {
+  assert.equal(app.includes('import { FilesetResolver'), false);
+  assert.ok(app.includes('await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm")'));
+  assert.ok(app.includes("Camera access requires HTTPS or localhost"));
 });
 
-test("the primary user controls have click handlers", () => {
+test("the primary controls have click handlers", () => {
   for (const id of ["start", "start2", "stopCamera", "action", "play"]) {
-    assert.match(app, new RegExp('\\$\\("' + id + '"\\)\\.addEventListener'));
+    assert.ok(app.includes('$("'+id+'").addEventListener'), "Missing click listener for " + id);
   }
-  assert.match(app, /querySelectorAll\\("\\.tab"\\)/);
+  assert.ok(app.includes('querySelectorAll(".tab")'), "Mode tabs should be interactive");
 });
 
 test("the app uses the Gesture Recognizer and local pinch fallback", () => {
-  assert.match(app, /GestureRecognizer\.createFromOptions/);
-  assert.match(app, /recognizeForVideo/);
-  assert.match(app, /detectGesture\(landmarks, stablePinch/);
-  assert.match(app, /requestAnimationFrame\(trackFrame\)/);
-  assert.match(app, /requestAnimationFrame\(gameFrame\)/);
+  assert.ok(app.includes("GestureRecognizer.createFromOptions"));
+  assert.ok(app.includes("recognizeForVideo"));
+  assert.ok(app.includes("detectGesture(landmarks, stablePinch"));
+  assert.ok(app.includes("requestAnimationFrame(trackFrame)"));
+  assert.ok(app.includes("requestAnimationFrame(gameFrame)"));
 });
