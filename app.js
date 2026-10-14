@@ -68,10 +68,16 @@ function detectGesture(landmarks, previousPinch = false, modelCategory = null, m
   };
   const thumbExtended = thumbIsExtended(landmarks, palmScale);
   const pinchRatio = distance2D(landmarks[4], landmarks[8]) / palmScale;
-  const pinchThreshold = previousPinch ? 0.39 : 0.29;
+  // Hysteresis separates the press threshold from the wider release threshold.
+  // The latch stays engaged through small landmark jitter around the boundary.
+  const pinchThreshold = previousPinch ? 0.43 : 0.28;
 
   if (pinchRatio < pinchThreshold) {
-    return { gesture: "Pinch", fingers, pinchRatio, palmScale, thumbExtended, source: "geometry" };
+    const pinchStrength = clamp((0.43 - pinchRatio) / (0.43 - 0.18), 0, 1);
+    return {
+      gesture: "Pinch", fingers, pinchRatio, palmScale, thumbExtended,
+      source: "geometry", confidence: Math.round((0.55 + pinchStrength * 0.45) * 100) / 100
+    };
   }
 
   // Prefer MediaPipe's trained classifier for supported canned gestures.
@@ -153,8 +159,20 @@ class GestureStabilizer {
     }
     if (next !== this.stable && now - this.candidateSince >= this.holdMs) {
       this.stable = next;
+      this.stableSince = now;
     }
     return this.stable;
+  }
+
+  getStatus(now = performance.now()) {
+    if (this.stable === "None") {
+      return { stable: false, durationMs: Math.max(0, now - this.candidateSince), candidate: this.candidate };
+    }
+    return {
+      stable: this.candidate === this.stable,
+      durationMs: Math.max(0, now - (this.stableSince || this.candidateSince)),
+      candidate: this.candidate
+    };
   }
 }
 
@@ -173,18 +191,25 @@ class CursorSmoother {
     this.initialized = true;
   }
 
-  update(x, y) {
+  update(x, y, now = (typeof performance !== "undefined" ? performance.now() : Date.now())) {
     x = clamp(x, 0, 1);
     y = clamp(y, 0, 1);
     if (!this.initialized) {
       this.reset(x, y);
+      this.lastAt = now;
       return { x: this.x, y: this.y };
     }
+    const elapsedMs = Math.max(1, Math.min(100, now - (this.lastAt ?? now - 16)));
+    this.lastAt = now;
     const delta = Math.hypot(x - this.x, y - this.y);
-    const deadZone = 0.0018;
+    const deadZone = 0.0014;
     if (delta <= deadZone) return { x: this.x, y: this.y };
-    const responsiveness = delta > 0.12 ? 0.62 : delta > 0.04 ? 0.38 : this.alpha;
-    const factor = Math.max(this.alpha, responsiveness);
+    // Keep small movements calm, but let intentional fast sweeps catch up quickly.
+    const speed = delta / elapsedMs * 1000;
+    const targetAlpha = speed > 1.8 || delta > 0.16 ? 0.72
+      : speed > 0.65 || delta > 0.055 ? 0.44
+      : this.alpha;
+    const factor = 1 - Math.pow(1 - clamp(targetAlpha, 0.08, 0.78), elapsedMs / 16.67);
     this.x += (x - this.x) * factor;
     this.y += (y - this.y) * factor;
     return { x: this.x, y: this.y };
@@ -210,6 +235,9 @@ let cameraActive = false;
 let trackingFrame = 0;
 let gameFrameRequest = 0;
 let lastVideoTime = -1;
+let lastHandSeenAt = 0;
+let lastHandLandmarks = null;
+const TRACKING_LOSS_GRACE_MS = 180;
 let fpsFrames = 0;
 let fpsWindowStart = 0;
 let currentMode = "cursor";
@@ -425,6 +453,8 @@ function stopCamera() {
   video.srcObject = null;
   trackingContext.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
   stabilizer.reset();
+  lastHandSeenAt = 0;
+  lastHandLandmarks = null;
   calibrationRun = null;
   $("calibrate").disabled = true;
   $("calibrate").textContent = cursorCalibration.calibrated ? "Recalibrate" : "Calibrate cursor";
@@ -504,6 +534,8 @@ function trackFrame(now) {
 
   if (result.landmarks?.length) {
     const landmarks = result.landmarks[0];
+    lastHandSeenAt = now;
+    lastHandLandmarks = landmarks;
     const wasCalibrating = !!calibrationRun;
     if (wasCalibrating) collectCalibrationSample(landmarks[8], now);
     drawLandmarks(landmarks, width, height);
@@ -520,13 +552,34 @@ function trackFrame(now) {
       }
     }
     const stable = stabilizer.update(raw.gesture, now);
+    const stability = stabilizer.getStatus(now);
     $("gesture").textContent = labels[stable] || labels.Unclear;
+    if (!wasCalibrating && now >= calibrationFeedbackUntil) {
+      const confidence = raw.source === "model" || raw.gesture === "Pinch"
+        ? Math.round((raw.confidence ?? 0.7) * 100) + "% confidence"
+        : "landmark match";
+      $("gestureConfidence").textContent = (stability.stable ? "Stable" : "Stabilizing") +
+        " · " + confidence + " · " + (stability.durationMs / 1000).toFixed(1) + "s";
+    }
     updateCursor(landmarks[8]);
     if (stable !== lastStableGesture) {
       if (!wasCalibrating) handleStableGesture(stable, lastStableGesture, now, landmarks, raw.source);
       lastStableGesture = stable;
     }
   } else {
+    // Brief model dropouts are common during fast movement. Preserve the last
+    // state briefly, but never indefinitely; after the grace window release actions.
+    const lossAge = lastHandSeenAt ? now - lastHandSeenAt : Infinity;
+    if (lastHandLandmarks && lossAge <= TRACKING_LOSS_GRACE_MS) {
+      if (!calibrationRun) updateCursor(lastHandLandmarks[8]);
+      $("gesture").textContent = "Tracking paused";
+      if (now >= calibrationFeedbackUntil) {
+        $("gestureConfidence").textContent = "Reacquiring hand · " +
+          Math.max(0, TRACKING_LOSS_GRACE_MS - lossAge).toFixed(0) + "ms grace";
+      }
+      return;
+    }
+    lastHandLandmarks = null;
     stabilizer.reset();
     stablePinch = false;
     if (lastStableGesture !== "None") {
