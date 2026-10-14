@@ -70,3 +70,40 @@ test("cursor smoother initializes promptly and suppresses micro-jitter", () => {
   assert.ok(moved.x > 0.5 && moved.y > 0.5);
   assert.ok(moved.x < 0.8 && moved.y < 0.8);
 });
+
+
+test("pinch press and release thresholds have a wider hysteresis gap", () => {
+  const hand = baseHand();
+  hand[8] = { x: 0.53, y: 0.45 }; // ratio about 0.30: outside press threshold
+  assert.notEqual(detectGesture(hand, false).gesture, "Pinch");
+  assert.equal(detectGesture(hand, true).gesture, "Pinch"); // still held until release threshold
+  hand[8] = { x: 0.56, y: 0.45 }; // ratio about 0.40: release
+  assert.notEqual(detectGesture(hand, true).gesture, "Pinch");
+});
+
+test("adaptive smoothing responds faster to a large sweep than a tiny adjustment", () => {
+  const small = new CursorSmoother(0.18);
+  small.update(0.5, 0.5, 0);
+  const smallStep = small.update(0.54, 0.5, 16);
+  const large = new CursorSmoother(0.18);
+  large.update(0.5, 0.5, 0);
+  const largeStep = large.update(0.9, 0.5, 16);
+  assert.ok(largeStep.x - 0.5 > (smallStep.x - 0.5) * 5);
+  assert.ok(largeStep.x < 0.9 && smallStep.x < 0.54);
+});
+
+test("gesture stability status reports stable versus candidate timing", () => {
+  const filter = new GestureStabilizer(100);
+  filter.update("Point", 1000);
+  assert.equal(filter.getStatus(1050).stable, false);
+  filter.update("Point", 1100);
+  assert.equal(filter.getStatus(1150).stable, true);
+  assert.equal(filter.getStatus(1150).candidate, "Point");
+});
+
+test("the engine exposes explicit short tracking grace policy in the live app", () => {
+  const source = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.ok(source.includes("const TRACKING_LOSS_GRACE_MS = 180"));
+  assert.ok(source.includes("Reacquiring hand"));
+  assert.ok(source.includes("lastHandLandmarks"));
+});
