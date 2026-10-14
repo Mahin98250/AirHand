@@ -54,10 +54,16 @@ export function detectGesture(landmarks, previousPinch = false, modelCategory = 
   };
   const thumbExtended = thumbIsExtended(landmarks, palmScale);
   const pinchRatio = distance2D(landmarks[4], landmarks[8]) / palmScale;
-  const pinchThreshold = previousPinch ? 0.39 : 0.29;
+  // Hysteresis separates the press threshold from the wider release threshold.
+  // The latch stays engaged through small landmark jitter around the boundary.
+  const pinchThreshold = previousPinch ? 0.43 : 0.28;
 
   if (pinchRatio < pinchThreshold) {
-    return { gesture: "Pinch", fingers, pinchRatio, palmScale, thumbExtended, source: "geometry" };
+    const pinchStrength = clamp((0.43 - pinchRatio) / (0.43 - 0.18), 0, 1);
+    return {
+      gesture: "Pinch", fingers, pinchRatio, palmScale, thumbExtended,
+      source: "geometry", confidence: Math.round((0.55 + pinchStrength * 0.45) * 100) / 100
+    };
   }
 
   // Prefer MediaPipe's trained classifier for supported canned gestures.
@@ -139,8 +145,20 @@ export class GestureStabilizer {
     }
     if (next !== this.stable && now - this.candidateSince >= this.holdMs) {
       this.stable = next;
+      this.stableSince = now;
     }
     return this.stable;
+  }
+
+  getStatus(now = performance.now()) {
+    if (this.stable === "None") {
+      return { stable: false, durationMs: Math.max(0, now - this.candidateSince), candidate: this.candidate };
+    }
+    return {
+      stable: this.candidate === this.stable,
+      durationMs: Math.max(0, now - (this.stableSince || this.candidateSince)),
+      candidate: this.candidate
+    };
   }
 }
 
@@ -159,18 +177,25 @@ export class CursorSmoother {
     this.initialized = true;
   }
 
-  update(x, y) {
+  update(x, y, now = (typeof performance !== "undefined" ? performance.now() : Date.now())) {
     x = clamp(x, 0, 1);
     y = clamp(y, 0, 1);
     if (!this.initialized) {
       this.reset(x, y);
+      this.lastAt = now;
       return { x: this.x, y: this.y };
     }
+    const elapsedMs = Math.max(1, Math.min(100, now - (this.lastAt ?? now - 16)));
+    this.lastAt = now;
     const delta = Math.hypot(x - this.x, y - this.y);
-    const deadZone = 0.0018;
+    const deadZone = 0.0014;
     if (delta <= deadZone) return { x: this.x, y: this.y };
-    const responsiveness = delta > 0.12 ? 0.62 : delta > 0.04 ? 0.38 : this.alpha;
-    const factor = Math.max(this.alpha, responsiveness);
+    // Keep small movements calm, but let intentional fast sweeps catch up quickly.
+    const speed = delta / elapsedMs * 1000;
+    const targetAlpha = speed > 1.8 || delta > 0.16 ? 0.72
+      : speed > 0.65 || delta > 0.055 ? 0.44
+      : this.alpha;
+    const factor = 1 - Math.pow(1 - clamp(targetAlpha, 0.08, 0.78), elapsedMs / 16.67);
     this.x += (x - this.x) * factor;
     this.y += (y - this.y) * factor;
     return { x: this.x, y: this.y };
