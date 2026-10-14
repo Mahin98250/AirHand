@@ -35,6 +35,8 @@ test("camera preview follows the source aspect ratio to prevent cropped fingers"
   assert.ok(app.includes("calibrationFeedbackUntil"));
   assert.ok(app.includes("localStorage.setItem(\"airhand-cursor-calibration\""));
   assert.ok(app.includes("function cycleDifficulty()"));
+  assert.ok(app.includes('document.querySelector(".gamebox").addEventListener("pointerdown"'));
+  assert.ok(app.includes('else if (currentMode === "game" && !game.playing) startGame();'));
   assert.ok(app.includes("const reliableDiscreteGesture = geometryOnlyFallback || source === \"model\";"));
   assert.ok(app.includes("function setSoundEnabled(enabled)"));
   assert.ok(app.includes("game.stars.push"));
