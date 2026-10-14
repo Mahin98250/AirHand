@@ -1,9 +1,10 @@
-const CACHE_NAME = "airhand-shell-v1";
+const CACHE_NAME = "airhand-shell-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./android-guide.html",
   "./app.js?v=airhand-20261014-26",
-  "./pwa.js?v=airhand-pwa-1",
+  "./pwa.js?v=airhand-pwa-2",
   "./manifest.webmanifest",
   "./airhand-icon.svg"
 ];
@@ -38,11 +39,12 @@ self.addEventListener("fetch", event => {
         const response = await fetch(request);
         if (response.ok) {
           const cache = await caches.open(CACHE_NAME);
-          cache.put("./index.html", response.clone()).catch(() => {});
+          cache.put(url.pathname.endsWith("/android-guide.html") ? "./android-guide.html" : "./index.html", response.clone()).catch(() => {});
         }
         return response;
       } catch (_) {
         return (await caches.match(request)) ||
+          (url.pathname.endsWith("/android-guide.html") ? await caches.match("./android-guide.html") : null) ||
           (await caches.match("./index.html")) ||
           new Response("AirHand is offline and its saved app shell is not available yet. Reconnect once and reload.", {
             status: 503,
