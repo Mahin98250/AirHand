@@ -668,6 +668,7 @@ function handleStableGesture(gesture, previous, now, landmarks = null, source = 
   if (gesture === "Pinch" && previous !== "Pinch") {
     stablePinch = true;
     if (currentMode === "cursor") activateVirtualTarget();
+    else if (currentMode === "game" && !game.playing) startGame();
     else if (game.playing && !game.paused) jump();
   } else if (previous === "Pinch") {
     stablePinch = false;
