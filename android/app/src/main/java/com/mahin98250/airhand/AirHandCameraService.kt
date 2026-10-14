@@ -42,6 +42,7 @@ class AirHandCameraService : LifecycleService() {
     private var cursorView: CursorDotView? = null
     private var cursorParams: WindowManager.LayoutParams? = null
     private var lastStableGesture = "None"
+    private var lastTapAtMs = 0L
     private var openPalmWristY: Float? = null
     private var lastScrollAtMs = 0L
     private var peaceStartedAtMs = 0L
@@ -100,7 +101,9 @@ class AirHandCameraService : LifecycleService() {
                     context = this,
                     onFrame = { landmarks, _ ->
                         if (shuttingDown || !isRunning) return@HandLandmarkerAnalyzer
-                        if (landmarks.size < 21) {
+                        if (landmarks.size < 21 || landmarks.any { !it.x.isFinite() || !it.y.isFinite() }) {
+                            // Clear the safety gate immediately: queued actions must not survive hand loss.
+                            GestureCommandRouter.lastDetectionAtMs = 0L
                             gestureEngine.reset()
                             cursorSmoother.reset()
                             lastStableGesture = "None"
@@ -123,9 +126,12 @@ class AirHandCameraService : LifecycleService() {
                         val screenY = smoothed.second
                         mainHandler.post { updateCursor(screenX, screenY, visible = true) }
 
+                        val nowForTap = System.currentTimeMillis()
                         val clickEdge = reading.stable && reading.gesture == "Pinch" &&
-                            lastStableGesture != "Pinch" && reading.confidence >= CLICK_CONFIDENCE
+                            lastStableGesture != "Pinch" && reading.confidence >= CLICK_CONFIDENCE &&
+                            nowForTap - lastTapAtMs >= CLICK_COOLDOWN_MS
                         if (clickEdge && GestureCommandRouter.mayDispatch(confidence = reading.confidence)) {
+                            lastTapAtMs = nowForTap
                             mainHandler.post {
                                 AirHandAccessibilityService.instance?.performTapAt(
                                     screenX, screenY, reading.confidence
@@ -185,8 +191,13 @@ class AirHandCameraService : LifecycleService() {
                         lastStableGesture = reading.gesture
                     },
                     onError = { message ->
+                        GestureCommandRouter.lastDetectionAtMs = 0L
+                        cursorSmoother.reset()
                         mainHandler.post {
-                            if (!shuttingDown) updateNotificationText(message)
+                            if (!shuttingDown) {
+                                updateCursor(0f, 0f, visible = false)
+                                updateNotificationText(message)
+                            }
                         }
                     }
                 )
@@ -361,6 +372,7 @@ class AirHandCameraService : LifecycleService() {
         private const val NOTIFICATION_ID = 4107
         private const val STOP_REQUEST_CODE = 4108
         private const val CLICK_CONFIDENCE = 0.85f
+        private const val CLICK_COOLDOWN_MS = 450L
         private const val SCROLL_THRESHOLD = 0.13f
         private const val SCROLL_COOLDOWN_MS = 650L
         private const val BACK_HOLD_MS = 900L
