@@ -13,9 +13,16 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the external AI runtime loads only after the page controls are wired", () => {
-  assert.doesNotMatch(app.split("\\n")[0], /https:\\/\\/cdn\\.jsdelivr\\.net/);
+  assert.doesNotMatch(app, /^import .*https:\\/\\/cdn\\.jsdelivr\\.net/m);
   assert.match(app, /await import\\("https:\\/\\/cdn\\.jsdelivr\\.net\\/@mediapipe\\/tasks-vision/);
   assert.match(app, /Camera access requires HTTPS or localhost/);
+});
+
+test("the primary user controls have click handlers", () => {
+  for (const id of ["start", "start2", "stopCamera", "action", "play"]) {
+    assert.match(app, new RegExp('\\$\\("' + id + '"\\)\\.addEventListener'));
+  }
+  assert.match(app, /querySelectorAll\\("\\.tab"\\)/);
 });
 
 test("the app uses the Gesture Recognizer and local pinch fallback", () => {
