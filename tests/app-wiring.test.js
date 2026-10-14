@@ -12,6 +12,13 @@ test("every statically referenced UI ID exists in index.html", () => {
   assert.deepEqual(missing, [], "Missing HTML IDs: " + missing.join(", "));
 });
 
+test("the browser loads one deferred classic script and bundles local helpers", () => {
+  assert.match(html, /<script defer src="\\.\\/app\\.js"><\\/script>/);
+  assert.match(app, /function detectGesture\\(/);
+  assert.match(app, /function reportAirHandRuntimeError\\(/);
+  assert.match(app, /window\\.__AIRHAND_READY__ = true/);
+});
+
 test("the page does not statically import the external AI CDN", () => {
   assert.equal(app.includes('import { FilesetResolver'), false);
   assert.ok(app.includes('await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm")'));
