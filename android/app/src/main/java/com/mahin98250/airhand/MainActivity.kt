@@ -112,87 +112,236 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderDashboard() {
+        val page = Color.rgb(244, 247, 252)
+        val ink = Color.rgb(25, 39, 63)
+        val muted = Color.rgb(104, 119, 143)
+        val blue = Color.rgb(47, 105, 237)
+        val line = Color.rgb(226, 233, 243)
+        val white = Color.WHITE
+
+        fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+        fun rounded(color: Int, radius: Int, stroke: Int = Color.TRANSPARENT): android.graphics.drawable.GradientDrawable =
+            android.graphics.drawable.GradientDrawable().apply {
+                setColor(color)
+                cornerRadius = dp(radius).toFloat()
+                if (stroke != Color.TRANSPARENT) setStroke(dp(1), stroke)
+            }
+        fun text(value: String, size: Float, color: Int = ink, bold: Boolean = false, gravity: Int = Gravity.START) =
+            TextView(this).apply {
+                text = value
+                textSize = size
+                setTextColor(color)
+                this.gravity = gravity
+                if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setLineSpacing(dp(2).toFloat(), 1f)
+            }
+        fun vertical(spacing: Int = 0) = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            if (spacing > 0) showDividers = LinearLayout.SHOW_DIVIDER_NONE
+        }
+        fun card(): com.google.android.material.card.MaterialCardView =
+            com.google.android.material.card.MaterialCardView(this).apply {
+                radius = dp(22).toFloat()
+                cardElevation = dp(1).toFloat()
+                setCardBackgroundColor(white)
+                strokeWidth = dp(1)
+                setStrokeColor(line)
+                useCompatPadding = false
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) }
+            }
+        fun sectionTitle(title: String, subtitle: String? = null): LinearLayout = vertical().apply {
+            addView(text(title, 17f, ink, true))
+            if (subtitle != null) {
+                addView(text(subtitle, 12f, muted).apply {
+                    setPadding(0, dp(3), 0, 0)
+                })
+            }
+        }
+        fun button(label: String, primary: Boolean = false, action: () -> Unit): Button =
+            com.google.android.material.button.MaterialButton(this).apply {
+                text = label
+                isAllCaps = false
+                textSize = 14f
+                typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                cornerRadius = dp(14)
+                insetTop = 0
+                insetBottom = 0
+                minimumHeight = dp(50)
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (primary) blue else Color.rgb(241, 245, 251)
+                )
+                setTextColor(if (primary) white else ink)
+                strokeWidth = if (primary) 0 else dp(1)
+                strokeColor = android.content.res.ColorStateList.valueOf(line)
+                setOnClickListener { action() }
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                    topMargin = dp(5)
+                    bottomMargin = dp(5)
+                }
+            }
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 18, 28, 18)
-            setBackgroundColor(Color.rgb(9, 16, 32))
+            setBackgroundColor(page)
         }
-        val scroll = ScrollView(this)
+        val scroll = ScrollView(this).apply {
+            clipToPadding = false
+            isFillViewport = true
+            setPadding(0, 0, 0, dp(22))
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(18), dp(16), dp(18), dp(10))
         }
 
-        fun heading(text: String, size: Float) = TextView(this).apply {
-            this.text = text
-            textSize = size
-            setTextColor(Color.WHITE)
+        // Brand header
+        val brandRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(2), dp(2), dp(16))
+        }
+        val brandMark = TextView(this).apply {
+            text = "A"
+            textSize = 23f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(white)
             gravity = Gravity.CENTER
-            setPadding(0, 10, 0, 10)
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(40, 104, 237), Color.rgb(68, 190, 255))
+            ).apply { cornerRadius = dp(15).toFloat() }
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(12) }
         }
-        fun button(label: String, action: () -> Unit) = Button(this).apply {
-            text = label
-            isAllCaps = false
-            setOnClickListener { action() }
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 6, 0, 6) }
+        brandRow.addView(brandMark)
+        brandRow.addView(vertical().apply {
+            addView(text("AirHand", 21f, ink, true))
+            addView(text("MOBILE CONTROLLER", 10f, muted, true).apply { letterSpacing = 0.12f })
+        })
+        val versionPill = TextView(this).apply {
+            text = "BETA"
+            textSize = 10f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(blue)
+            gravity = Gravity.CENTER
+            background = rounded(Color.rgb(231, 239, 255), 9)
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+            layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                marginStart = dp(8)
+            }
         }
+        brandRow.addView(versionPill)
+        content.addView(brandRow)
 
-        content.addView(heading("AirHand", 34f))
-        content.addView(heading("Hands-free Android controller", 18f))
-        status = heading("Ready. System-wide mode requires camera, overlay, Accessibility and notification permissions.", 15f)
-        content.addView(status)
+        // Hero and live status
+        val hero = card().apply {
+            radius = dp(25).toFloat()
+            strokeWidth = 0
+            cardElevation = dp(3).toFloat()
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(24, 48, 103), Color.rgb(39, 95, 203), Color.rgb(45, 137, 226))
+            ).apply { cornerRadius = dp(25).toFloat() }
+            setCardBackgroundColor(Color.TRANSPARENT)
+        }
+        val heroContent = vertical().apply { setPadding(dp(20), dp(20), dp(20), dp(20)) }
+        heroContent.addView(text("HANDS-FREE, AT YOUR PACE", 10f, Color.rgb(194, 219, 255), true).apply {
+            letterSpacing = 0.14f
+        })
+        heroContent.addView(text("Your phone.\nYour gestures.", 29f, white, true).apply {
+            setPadding(0, dp(8), 0, dp(7))
+            setLineSpacing(0f, 0.98f)
+        })
+        heroContent.addView(text(
+            "Move, tap and navigate with your hand. You stay in control at every step.",
+            13f, Color.rgb(230, 240, 255)
+        ))
+        val statusPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(Color.argb(35, 255, 255, 255), 14, Color.argb(55, 255, 255, 255))
+            setPadding(dp(13), dp(11), dp(13), dp(11))
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(17) }
+        }
+        status = text(
+            "Ready to begin. Camera, overlay, Accessibility and notification permissions are needed for system-wide control.",
+            12f, white
+        )
+        statusPanel.addView(text("SESSION STATUS", 9f, Color.rgb(194, 219, 255), true))
+        statusPanel.addView(status.apply { setPadding(0, dp(4), 0, 0) })
+        heroContent.addView(statusPanel)
+        hero.addView(heroContent)
+        content.addView(hero)
 
+        // Camera preview card
+        val cameraCard = card()
+        val cameraContent = vertical().apply { setPadding(dp(15), dp(15), dp(15), dp(15)) }
+        cameraContent.addView(sectionTitle("Live hand tracking", "On-device detection · camera frames stay on your phone"))
         previewView = PreviewView(this).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             scaleType = PreviewView.ScaleType.FIT_CENTER
-            setBackgroundColor(Color.rgb(18, 27, 46))
+            setBackgroundColor(Color.rgb(13, 22, 42))
             contentDescription = "Front camera preview. On-device hand landmark detection activates when preview tracking starts."
         }
-        content.addView(previewView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            (260 * resources.displayMetrics.density).toInt()
-        ).apply { setMargins(0, 8, 0, 8) })
-
-        detectionStatus = heading("Hand tracking is off.", 15f)
-        content.addView(detectionStatus)
-
-        cameraButton = button("Enable camera / start hand tracking") {
+        cameraContent.addView(previewView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(225)
+        ).apply { topMargin = dp(13); bottomMargin = dp(10) })
+        detectionStatus = text("Tracking is off. Start the camera to find your hand.", 12f, muted).apply {
+            background = rounded(Color.rgb(245, 248, 252), 12)
+            setPadding(dp(12), dp(11), dp(12), dp(11))
+        }
+        cameraContent.addView(detectionStatus)
+        cameraButton = button("Start hand tracking", true) {
             if (cameraPreviewActive) stopCameraPreview(updateStatus = true)
             else if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCameraPreview()
             else cameraPermission.launch(Manifest.permission.CAMERA)
         }
-        content.addView(cameraButton)
+        cameraContent.addView(cameraButton)
         calibrationButton = button("Calibrate cursor range · 5 seconds") { beginCursorCalibration() }
         calibrationButton.isEnabled = false
-        content.addView(calibrationButton)
-        content.addView(heading(
-            "For calibration, show one hand clearly and sweep your index fingertip slowly through the widest comfortable area for five seconds. AirHand saves only the movement range, not camera images.",
-            12f
-        ))
-        systemControlButton = button("Start system-wide gesture control") { requestSystemWideControl() }
-        content.addView(systemControlButton)
+        cameraContent.addView(calibrationButton)
+        cameraContent.addView(text(
+            "Keep one hand fully in frame. Move your index fingertip slowly across the widest comfortable range, both horizontally and vertically.",
+            11f, muted
+        ).apply { setPadding(dp(2), dp(5), dp(2), dp(2)) })
+        cameraCard.addView(cameraContent)
+        content.addView(cameraCard)
 
-        content.addView(button("Enable AirHand Gesture Keyboard") {
+        // Primary action card
+        val controlCard = card()
+        val controlContent = vertical().apply { setPadding(dp(16), dp(16), dp(16), dp(16)) }
+        controlContent.addView(sectionTitle("Gesture control", "Use gestures across apps where Android allows"))
+        systemControlButton = button("Start system-wide control", true) { requestSystemWideControl() }
+        controlContent.addView(systemControlButton)
+        controlContent.addView(text(
+            "A persistent notification stays available while control is active. Pause or stop at any time.",
+            11f, muted
+        ).apply { setPadding(dp(2), dp(5), dp(2), dp(8)) })
+        controlContent.addView(text("SETUP & PERMISSIONS", 10f, muted, true).apply {
+            letterSpacing = 0.1f
+            setPadding(0, dp(9), 0, dp(4))
+        })
+        controlContent.addView(button("Enable AirHand Gesture Keyboard") {
             status.text = "Android will open Input Method Settings. Enable AirHand Gesture Keyboard there, then choose it from the keyboard picker."
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
         })
-        content.addView(button("Choose active keyboard") {
+        controlContent.addView(button("Choose active keyboard") {
             val manager = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
             manager.showInputMethodPicker()
         })
-        content.addView(button("Grant microphone permission for voice typing") {
+        controlContent.addView(button("Grant microphone permission for voice typing") {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                 status.text = "Microphone permission is already granted. Use the Voice key on the AirHand keyboard."
             } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
         })
-        content.addView(button("Enable Accessibility actions") {
+        controlContent.addView(button("Enable Accessibility actions") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         })
-        content.addView(button("Allow floating overlay") {
+        controlContent.addView(button("Allow floating overlay") {
             if (Settings.canDrawOverlays(this)) status.text = "Overlay permission is already enabled."
             else startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         })
-        content.addView(button("Try voice recognition here") {
+        controlContent.addView(button("Try voice recognition") {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
@@ -201,20 +350,71 @@ class MainActivity : AppCompatActivity() {
             try { speechLauncher.launch(intent) }
             catch (_: Exception) { status.text = "No compatible speech recognition app is available on this device." }
         })
-        content.addView(button("Emergency stop") { stopAllControl() })
+        controlCard.addView(controlContent)
+        content.addView(controlCard)
 
-        content.addView(heading("Current milestone", 20f))
-        content.addView(heading("Gesture controls", 20f))
-        content.addView(heading(
-            "Point to move the cursor • briefly pinch and release to tap • hold a steady pinch to long-press • move an open palm up or down to scroll • hold a Peace sign for Back • hold a thumbs-up for Home • hold a fist to open recent apps. " +
-                "Pinch movement cancels the tap/long-press; held navigation poses fire once until released.",
-            14f
-        ))
-        content.addView(heading(
-            "For chatting, enable and choose AirHand Gesture Keyboard, then tap the text field and use its keys or Voice key. Review the message and tap Send yourself; AirHand never sends it automatically. " +
-                "The persistent notification offers Pause and Stop while system-wide mode is active. Pause disables gesture actions while leaving camera tracking visible. Secure screens and restricted apps may block control.",
-            14f
-        ))
+        // Gesture cheat sheet
+        val gestureCard = card()
+        val gestureContent = vertical().apply { setPadding(dp(16), dp(16), dp(16), dp(16)) }
+        gestureContent.addView(sectionTitle("Gesture quick guide", "Learn a few simple poses to get started"))
+        val gestures = listOf(
+            "☝" to ("Point" to "Move cursor"),
+            "🤏" to ("Pinch" to "Tap / hold"),
+            "✋" to ("Open palm" to "Scroll"),
+            "✌" to ("Peace sign" to "Go back"),
+            "👍" to ("Thumbs-up" to "Home"),
+            "✊" to ("Fist" to "Recent apps")
+        )
+        val gestureGrid = android.widget.GridLayout(this).apply {
+            columnCount = 2
+            useDefaultMargins = false
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }
+        }
+        gestures.forEach { (emoji, info) ->
+            val tile = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = rounded(Color.rgb(246, 249, 253), 14, line)
+                setPadding(dp(12), dp(12), dp(10), dp(12))
+                val params = android.widget.GridLayout.LayoutParams().apply {
+                    width = 0
+                    height = -2
+                    columnSpec = android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f)
+                    setMargins(dp(3), dp(3), dp(3), dp(3))
+                }
+                layoutParams = params
+                addView(text(emoji, 22f, blue, true))
+                addView(text(info.first, 13f, ink, true).apply { setPadding(0, dp(4), 0, 0) })
+                addView(text(info.second, 11f, muted))
+            }
+            gestureGrid.addView(tile)
+        }
+        gestureContent.addView(gestureGrid)
+        gestureContent.addView(text(
+            "A brief pinch and release taps. Hold a steady pinch for a long press. Moving while pinching cancels the tap. Navigation poses trigger once until released.",
+            11f, muted
+        ).apply { setPadding(dp(2), dp(10), dp(2), 0) })
+        gestureCard.addView(gestureContent)
+        content.addView(gestureCard)
+
+        // Safety and emergency stop
+        val safetyCard = card().apply {
+            setCardBackgroundColor(Color.rgb(255, 249, 239))
+            setStrokeColor(Color.rgb(248, 226, 190))
+        }
+        val safetyContent = vertical().apply { setPadding(dp(16), dp(15), dp(16), dp(15)) }
+        safetyContent.addView(text("STAY IN CONTROL", 10f, Color.rgb(137, 89, 24), true))
+        safetyContent.addView(text(
+            "Review dictated text before sending. AirHand never sends messages automatically. Secure screens and some restricted apps may block gestures.",
+            12f, Color.rgb(104, 78, 42)
+        ).apply { setPadding(0, dp(5), 0, dp(10)) })
+        safetyContent.addView(button("Emergency stop") { stopAllControl() })
+        safetyCard.addView(safetyContent)
+        content.addView(safetyCard)
+        content.addView(text(
+            "AirHand Mobile · Early access build\nCamera and system-wide controls run only after you start them.",
+            10f, muted, false, Gravity.CENTER
+        ).apply { setPadding(dp(10), dp(2), dp(10), dp(10)) })
+
         scroll.addView(content)
         root.addView(scroll)
         setContentView(root)
