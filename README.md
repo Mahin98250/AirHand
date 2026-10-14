@@ -95,3 +95,12 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 - Automated regression coverage checks camera recovery wiring and the new accessibility hooks.
 
 **Still requires physical validation:** revoke camera permission and retry on Android/desktop, unplug or switch cameras where supported, background and restore the mobile browser, and test keyboard navigation with a screen reader. Automated tests do not establish device-specific camera behavior or full accessibility conformance.
+
+
+## Phase 6 — Tracking interruption safety
+
+- A brief inference error is tolerated; if inference stays broken for 180 ms, AirHand clears stale gesture state and reports that tracking is retrying.
+- Hand loss or sustained inference errors cancel an active drag instead of treating the last cursor position as a deliberate pinch release. This avoids accidental drops/selections from stale coordinates.
+- Regression tests verify the grace policy and that tracking-loss handling cannot commit a drag through the normal release handler.
+
+**Still requires physical validation:** deliberately occlude the hand during a pinch/drag, move quickly in and out of frame, and test camera/model recovery on Android and desktop browsers. Automated tests validate the state-handling path, not physical tracking accuracy.
