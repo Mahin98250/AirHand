@@ -104,3 +104,13 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 - Regression tests verify the grace policy and that tracking-loss handling cannot commit a drag through the normal release handler.
 
 **Still requires physical validation:** deliberately occlude the hand during a pinch/drag, move quickly in and out of frame, and test camera/model recovery on Android and desktop browsers. Automated tests validate the state-handling path, not physical tracking accuracy.
+
+
+## Phase 7 — Air Drive (first playable build)
+
+- Adds a third **Air Drive** mode with a perspective road, projected lane markings and roadside posts, a player car, oncoming traffic, speed/score HUD, collisions and restart. This is a lightweight pseudo-3D canvas scene, not a full WebGL/physics simulation.
+- MediaPipe is configured to track up to two hands. The air-steering controller uses the angle between the wrists relative to a neutral calibration pose, with a dead zone, bounded steering, smoothing, hand-span validation and confidence feedback.
+- Keyboard backup steering (Left/Right or A/D) allows the game loop to be exercised without a webcam. The camera and hand models are still loaded only when the user enables the camera.
+- Automated tests cover steering calibration, rotation response, close-hand rejection and missing-hand behavior.
+
+**Important validation limit:** the steering math and game loop have automated coverage, but camera-driven steering accuracy, left/right direction on mirrored camera previews, and real-device performance still need physical testing. This is a first playable prototype; no real-world accuracy claim is made.
