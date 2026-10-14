@@ -12,7 +12,8 @@ const cameraStage = $("stage");
 let landmarker = null;
 let mediaStream = null;
 let cameraActive = false;
-let trackingFrame = 0;\nlet gameFrameRequest = 0;
+let trackingFrame = 0;
+let gameFrameRequest = 0;
 let lastVideoTime = -1;
 let fpsFrames = 0;
 let fpsWindowStart = 0;
@@ -34,12 +35,12 @@ const labels = {
   OpenPalm: "Open palm", Fist: "Fist"
 };
 const game = {
-  playing: false, paused: false, score: 0, best: Number(localStorage.getItem("airhand-best") || 0),
+  playing: false, paused: false, score: 0, best: readBestScore(),
   speed: 250, playerY: 0, velocityY: 0, obstacles: [], spawnIn: 0, ground: 0
 };
 let toastTimeout = null;
 
-function showToast(message) {
+function readBestScore() {\n  try { return Number(localStorage.getItem("airhand-best") || 0); } catch { return 0; }\n}\nfunction showToast(message) {
   const toast = $("toast");
   toast.textContent = message;
   toast.classList.add("show");
@@ -55,11 +56,13 @@ function updateCameraUI(active) {
   $("status").textContent = active ? "Camera on" : "Camera off";
   $("stage").classList.toggle("on", active);
   $("placeholder").classList.toggle("hidden", active);
-  $("action").disabled = !active;\n  $("stopCamera").disabled = !active;
+  $("action").disabled = !active;
+  $("stopCamera").disabled = !active;
   $("action").textContent = active
     ? (currentMode === "cursor" ? "Re-center cursor →" : "Restart runner →")
     : "Enable camera →";
-  $("start").textContent = active ? "◉ Camera enabled" : "◉  Enable camera";\n  if ($("stopCamera")) $("stopCamera").disabled = !active;
+  $("start").textContent = active ? "◉ Camera enabled" : "◉  Enable camera";
+  if ($("stopCamera")) $("stopCamera").disabled = !active;
   if (active) {
     $("start").disabled = false;
     setReady("Hand tracking is live", "Move your hand inside the camera frame.");
@@ -146,7 +149,8 @@ function stopMediaTracks() {
 }
 function stopCamera() {
   cameraActive = false;
-  cancelAnimationFrame(trackingFrame);\n  cancelAnimationFrame(gameFrameRequest);
+  cancelAnimationFrame(trackingFrame);
+  cancelAnimationFrame(gameFrameRequest);
   stopMediaTracks();
   if (landmarker) { landmarker.close(); landmarker = null; }
   video.srcObject = null;
@@ -203,7 +207,7 @@ function drawLandmarks(landmarks, width, height) {
 }
 function trackFrame(now) {
   if (!cameraActive || !landmarker) return;
-  animationFrame = requestAnimationFrame(trackFrame);
+  trackingFrame = requestAnimationFrame(trackFrame);
   if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
   let result;
@@ -438,7 +442,7 @@ function resumeGame() {
   game.paused = false;
   lastGameFrame = 0;
   $("overlay").classList.add("hidden");
-  animationFrame = requestAnimationFrame(gameFrame);
+  gameFrameRequest = requestAnimationFrame(gameFrame);
 }
 function endGame() {
   game.playing = false;
@@ -446,7 +450,7 @@ function endGame() {
   const score = Math.floor(game.score);
   if (score > game.best) {
     game.best = score;
-    try { localStorage.setItem("airhand-best", String(game.best)); } catch { /* private browsing may disable storage */ }
+    try { localStorage.setItem("airhand-best", String(game.best)); } catch { /* storage may be disabled in private browsing */ }
   }
   renderGame();
   showGameOverlay("Run complete · " + score + " points", "Best score: " + game.best + ". Pinch or tap to play again.", "Play again");
@@ -460,7 +464,11 @@ function showGameOverlay(title, message, button) {
 
 $("start").addEventListener("click", startCamera);
 $("start2").addEventListener("click", startCamera);
-$("stopCamera").addEventListener("click", stopCamera);\n$("landmarkToggle").addEventListener("change", event => { showLandmarks = event.target.checked; });\n$("mirrorToggle").addEventListener("change", event => { mirrorCamera = event.target.checked; video.style.transform = mirrorCamera ? "scaleX(-1)" : "none"; });\n$("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; });\n$("action").addEventListener("click", () => {
+$("stopCamera").addEventListener("click", stopCamera);
+$("landmarkToggle").addEventListener("change", event => { showLandmarks = event.target.checked; });
+$("mirrorToggle").addEventListener("change", event => { mirrorCamera = event.target.checked; video.style.transform = mirrorCamera ? "scaleX(-1)" : "none"; });
+$("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; });
+$("action").addEventListener("click", () => {
   if (!cameraActive) return startCamera();
   if (currentMode === "cursor") {
     cursorFilter.reset(.5, .5);
