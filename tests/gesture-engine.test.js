@@ -158,14 +158,14 @@ test("Air Drive steering direction matches the driver's right-turn and left-turn
   };
   const left = hand(0.25, 0.5);
   const neutralRight = hand(0.75, 0.5);
-  const controller = new LiveSteeringController();
+  const controller = new LiveSteeringController({ inverted: true });
   assert.equal(controller.calibrate(left, neutralRight), true);
-  // In the mirrored camera view, this wrist-line rotation corresponds to the user turning right.
+  // In the mirrored camera view, reverse mode makes this wrist-line rotation turn right.
   const rightTurn = controller.update(left, hand(0.75, 0.44), 20);
   assert.ok(rightTurn.value > 0, "right-turn gesture must steer right");
   controller.reset();
   assert.equal(controller.calibrate(left, neutralRight), true);
-  // The opposite mirrored wrist-line rotation must steer left.
+  // The opposite mirrored wrist-line rotation must steer left in reverse mode.
   const leftTurn = controller.update(left, hand(0.75, 0.56), 20);
   assert.ok(leftTurn.value < 0, "left-turn gesture must steer left");
 });
