@@ -148,3 +148,24 @@ test("Phase 8 live steering responds to small wheel turns with quicker smoothing
   assert.ok(steering.smoothing >= 0.4);
   assert.ok(steering.maxTurnRadians <= 0.5);
 });
+
+
+test("Air Drive steering direction matches the driver's right-turn and left-turn intent", () => {
+  const hand = (x, y) => {
+    const points = Array.from({ length: 21 }, () => ({ x, y }));
+    points[0] = { x, y };
+    return points;
+  };
+  const left = hand(0.25, 0.5);
+  const neutralRight = hand(0.75, 0.5);
+  const controller = new LiveSteeringController();
+  assert.equal(controller.calibrate(left, neutralRight), true);
+  // With the right wrist moving down, the imaginary wheel rotates right.
+  const rightTurn = controller.update(left, hand(0.75, 0.56), 20);
+  assert.ok(rightTurn.value > 0, "right-turn gesture must steer right");
+  controller.reset();
+  assert.equal(controller.calibrate(left, neutralRight), true);
+  // With the right wrist moving up, the imaginary wheel rotates left.
+  const leftTurn = controller.update(left, hand(0.75, 0.44), 20);
+  assert.ok(leftTurn.value < 0, "left-turn gesture must steer left");
+});
