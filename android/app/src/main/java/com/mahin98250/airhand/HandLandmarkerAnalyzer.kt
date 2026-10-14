@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * CameraX RGBA -> upright/mirrored bitmap -> on-device MediaPipe Hand Landmarker.
- * Frame buffers are closed immediately after copying, and one inference frame is allowed in flight.
+ * Handles padded rows and closes CameraX buffers immediately after copying. One inference at a time.
  */
 class HandLandmarkerAnalyzer(
     context: Context,
@@ -66,6 +66,8 @@ class HandLandmarkerAnalyzer(
             return
         }
 
+        // Capture metadata before closing ImageProxy: some CameraX implementations invalidate it.
+        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
         val rawBitmap = try {
             copyRgbaPlane(imageProxy)
         } catch (error: Exception) {
@@ -73,7 +75,6 @@ class HandLandmarkerAnalyzer(
             onError("Could not prepare a camera frame: ${error.javaClass.simpleName}")
             null
         } finally {
-            // Never hold CameraX's buffer while MediaPipe is running.
             imageProxy.close()
         } ?: return
 
@@ -81,14 +82,13 @@ class HandLandmarkerAnalyzer(
         var mirroredBitmap: Bitmap? = null
         var mpImage: MPImage? = null
         try {
-            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             uprightBitmap = if (rotationDegrees == 0) rawBitmap else {
                 val rotation = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
                 Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, rotation, true)
                     .also { if (it !== rawBitmap) rawBitmap.recycle() }
             }
 
-            // Mirroring is applied after rotation so portrait and landscape cameras align consistently.
+            // Mirror after rotation so front-camera points use a consistent user-facing coordinate space.
             val mirror = Matrix().apply {
                 postScale(-1f, 1f, uprightBitmap.width / 2f, uprightBitmap.height / 2f)
             }
@@ -110,9 +110,14 @@ class HandLandmarkerAnalyzer(
             }
             landmarker.detectAsync(mpImage, SystemClock.uptimeMillis())
         } catch (error: Exception) {
-            if (mirroredBitmap == null) {
-                uprightBitmap?.takeUnless { it.isRecycled }?.recycle()
-                if (uprightBitmap == null) rawBitmap.takeUnless { it.isRecycled }?.recycle()
+            // Any bitmap still owned by this stack (not transferred to pending state) must be recycled.
+            val pendingOwnsBitmap = synchronized(lock) { pendingBitmap === mirroredBitmap && mirroredBitmap != null }
+            if (!pendingOwnsBitmap) {
+                mirroredBitmap?.takeUnless { it.isRecycled }?.recycle()
+                if (mirroredBitmap == null) {
+                    uprightBitmap?.takeUnless { it.isRecycled }?.recycle()
+                    if (uprightBitmap == null) rawBitmap.takeUnless { it.isRecycled }?.recycle()
+                }
             }
             releasePending(mpImage)
             onError("Hand tracking could not process a frame: ${error.javaClass.simpleName}")
@@ -147,23 +152,18 @@ class HandLandmarkerAnalyzer(
     }
 
     private fun releasePending(expected: MPImage? = null) {
+        // Only one in-flight frame is accepted; release the single owned input regardless of callback identity.
         val resources = synchronized(lock) {
-            val currentImage = pendingImage
-            if (expected != null && currentImage != null && currentImage !== expected) {
-                null
-            } else {
-                val pair = currentImage to pendingBitmap
-                pendingImage = null
-                pendingBitmap = null
-                pair
-            }
-        }
-        if (resources == null) {
-            expected?.close()
-            return
+            val pair = pendingImage to pendingBitmap
+            pendingImage = null
+            pendingBitmap = null
+            pair
         }
         try { resources.first?.close() } catch (_: Exception) { }
         try { resources.second?.takeUnless { it.isRecycled }?.recycle() } catch (_: Exception) { }
+        if (resources.first == null && resources.second == null) {
+            try { expected?.close() } catch (_: Exception) { }
+        }
         inFlight.set(false)
     }
 
