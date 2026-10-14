@@ -78,6 +78,7 @@ function updateCameraUI(active) {
 
 async function startCamera() {
   if (cameraActive) return;
+  geometryOnlyFallback = false;
   $("start").disabled = true;
   $("start2").disabled = true;
   $("action").disabled = true;
