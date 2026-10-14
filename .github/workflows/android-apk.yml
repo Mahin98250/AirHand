@@ -40,16 +40,9 @@ jobs:
           test -s android/build.gradle
           test -s android/app/build.gradle
           test -s android/app/src/main/AndroidManifest.xml
-      - name: Download pinned MediaPipe hand model
-        shell: bash
-        run: |
-          set -euo pipefail
-          model_path="android/app/src/main/assets/hand_landmarker.task"
-          mkdir -p "$(dirname "$model_path")"
-          curl --fail --silent --show-error --location --retry 3 --retry-delay 2             "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"             --output "$model_path"
-          printf '%s  %s\n'             "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"             "$model_path" | sha256sum --check --strict
-          test "$(wc -c < "$model_path" | tr -d ' ')" = "7819105"
-          echo "Pinned hand-landmarker model verified and will be packaged into the APK."
+          test -s android/app/src/main/java/com/mahin98250/airhand/HandLandmarkerAnalyzer.kt
+      - name: Download and verify pinned hand model
+        run: bash android/download-hand-model.sh
       - name: Build debug APK
         run: gradle --no-daemon -p android :app:assembleDebug
       - name: Inspect APK contents
