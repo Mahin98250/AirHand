@@ -1,4 +1,3 @@
-import { FilesetResolver, GestureRecognizer, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm";
 import { clamp, detectGesture, GestureStabilizer, CursorSmoother } from "./gesture-engine.js";
 
 const $ = id => document.getElementById(id);
@@ -9,6 +8,9 @@ const gameCanvas = $("game");
 const gameContext = gameCanvas.getContext("2d");
 const cameraStage = $("stage");
 
+let FilesetResolver = null;
+let GestureRecognizer = null;
+let HandLandmarker = null;
 let gestureRecognizer = null;
 let geometryOnlyFallback = false;
 let mediaStream = null;
@@ -94,7 +96,7 @@ async function startCamera() {
     video.srcObject = mediaStream;
     await video.play();
 
-    const vision = await FilesetResolver.forVisionTasks(
+    // Load MediaPipe only after the UI has already initialized and the user starts the camera.\n    // A CDN outage must not prevent navigation and non-camera controls from working.\n    if (!FilesetResolver) {\n      const mediaPipeModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm");\n      FilesetResolver = mediaPipeModule.FilesetResolver;\n      GestureRecognizer = mediaPipeModule.GestureRecognizer;\n      HandLandmarker = mediaPipeModule.HandLandmarker;\n    }\n    const vision = await FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
     );
     const modelOptions = {
@@ -107,7 +109,7 @@ async function startCamera() {
       gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
         ...modelOptions,
         baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-tasks/gesture_recognizer/gesture_recognizer.task",
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task",
           delegate: "GPU"
         }
       });
