@@ -49,6 +49,7 @@ class AirHandAccessibilityService : AccessibilityService() {
         return when (action) {
             NavigationAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
             NavigationAction.HOME -> performGlobalAction(GLOBAL_ACTION_HOME)
+            NavigationAction.RECENTS -> performGlobalAction(GLOBAL_ACTION_RECENTS)
             NavigationAction.NOTIFICATIONS -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
             NavigationAction.SCROLL_DOWN -> dispatchSwipe(0.5f, 0.72f, 0.5f, 0.28f)
             NavigationAction.SCROLL_UP -> dispatchSwipe(0.5f, 0.28f, 0.5f, 0.72f)
@@ -66,7 +67,7 @@ class AirHandAccessibilityService : AccessibilityService() {
         return dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
     }
 
-    enum class NavigationAction { BACK, HOME, NOTIFICATIONS, SCROLL_UP, SCROLL_DOWN }
+    enum class NavigationAction { BACK, HOME, RECENTS, NOTIFICATIONS, SCROLL_UP, SCROLL_DOWN }
 
     companion object {
         @Volatile var instance: AirHandAccessibilityService? = null
