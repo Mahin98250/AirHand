@@ -26,9 +26,10 @@ The GitHub Actions workflow at .github/workflows/android-apk.yml:
 
 1. Downloads the pinned MediaPipe hand model using android/download-hand-model.sh.
 2. Verifies the file's SHA-256 digest and byte count.
-3. Compiles the Android debug APK.
-4. Verifies the APK exists and contains the model asset.
-5. Uploads the APK as the **AirHand-Mobile-debug-APK** artifact.
+3. Runs JVM unit tests for cursor smoothing and gesture safety gates.
+4. Compiles the Android debug APK.
+5. Verifies the APK exists and contains the model asset.
+6. Uploads the APK as the **AirHand-Mobile-debug-APK** artifact.
 
 Open the repository's Actions tab, choose **Build AirHand Mobile APK**, open the newest completed successful run, and download the artifact. Extract the ZIP to get app-debug.apk. Only a successful run with the artifact is a real APK build. Debug APKs are for testing, not Play Store distribution; signed release builds require a dedicated signing/release setup.
 
