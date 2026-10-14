@@ -18,7 +18,7 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the browser loads one deferred classic script and bundles local helpers", () => {
-  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-18"></script>'));
+  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-19"></script>'));
   assert.ok(app.includes("function detectGesture("));
   assert.ok(app.includes("function reportAirHandRuntimeError("));
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
@@ -140,4 +140,17 @@ test("Phase 5 adds accessible live status, canvas descriptions, and visible keyb
   assert.ok(html.includes('aria-label="Live camera preview for hand tracking"'));
   assert.ok(html.includes('aria-label="Hand Runner game. Use Space to jump and P to pause."'));
   assert.ok(html.includes('button:focus-visible,input:focus-visible,.tab:focus-visible'));
+});
+
+
+test("Phase 6 safely cancels stale pinch/drag state after tracking or inference loss", () => {
+  assert.ok(app.includes("const INFERENCE_ERROR_GRACE_MS = 180"));
+  assert.ok(app.includes("if (now - inferenceErrorSince >= INFERENCE_ERROR_GRACE_MS)"));
+  assert.ok(app.includes('cancelVirtualDrag("Tracking interrupted")'));
+  assert.ok(app.includes('cancelVirtualDrag("Tracking lost")'));
+  assert.ok(app.includes("Hand inference failed · retrying"));
+  // Tracking loss must not route through finishVirtualDrag, which can drop at stale coordinates.
+  const lossBranch = app.slice(app.indexOf("const lossAge = lastHandSeenAt"), app.indexOf("fpsFrames++"));
+  assert.equal(lossBranch.includes('handleStableGesture("None", lastStableGesture'), false);
+  assert.ok(lossBranch.includes("resetDwellProgress()"));
 });
