@@ -224,6 +224,23 @@ let mirrorCamera = true;
 let showLandmarks = true;
 const stabilizer = new GestureStabilizer(115);
 const cursorFilter = new CursorSmoother(cursorSensitivity);
+const DEFAULT_CURSOR_CALIBRATION = { minX: 0.08, maxX: 0.92, minY: 0.08, maxY: 0.92, calibrated: false };
+function loadCursorCalibration() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("airhand-cursor-calibration") || "null");
+    if (saved && Number.isFinite(saved.minX) && Number.isFinite(saved.maxX) &&
+        Number.isFinite(saved.minY) && Number.isFinite(saved.maxY) &&
+        saved.maxX - saved.minX > 0.12 && saved.maxY - saved.minY > 0.12) {
+      return { ...saved, calibrated: true };
+    }
+  } catch { /* storage can be unavailable in private mode */ }
+  return { ...DEFAULT_CURSOR_CALIBRATION };
+}
+let cursorCalibration = loadCursorCalibration();
+let calibrationRun = null;
+let lastStarMilestone = 0;
+let soundEnabled = false;
+let audioContext = null;
 const SUPPORTED_MODEL_GESTURES = new Set(["Pointing_Up", "Victory", "Thumb_Up", "Open_Palm", "Closed_Fist"]);
 const labels = {
   None: "No hand detected", Unclear: "Adjust your hand", Pinch: "Pinch",
@@ -232,7 +249,7 @@ const labels = {
 };
 const game = {
   playing: false, paused: false, score: 0, best: readBestScore(),
-  speed: 250, playerY: 0, velocityY: 0, obstacles: [], spawnIn: 0, ground: 0
+  speed: 250, playerY: 0, velocityY: 0, obstacles: [], spawnIn: 0, ground: 0, stars: [], starSpawnIn: 1.3, combo: 0, comboTimer: 0, collected: 0, popups: [], difficulty: "normal"
 };
 let toastTimeout = null;
 
@@ -257,11 +274,13 @@ function updateCameraUI(active) {
   $("placeholder").classList.toggle("hidden", active);
   $("action").disabled = false;
   $("stopCamera").disabled = !active;
+  $("calibrate").disabled = !active;
   $("action").textContent = active
     ? (currentMode === "cursor" ? "Re-center cursor →" : "Restart runner →")
     : "Enable camera →";
   $("start").textContent = active ? "◉ Camera enabled" : "◉  Enable camera";
   if ($("stopCamera")) $("stopCamera").disabled = !active;
+  if ($("calibrate")) $("calibrate").disabled = !active;
   if (active) {
     $("start").disabled = false;
     setReady("Hand tracking is live", "Move your hand inside the camera frame.");
@@ -399,6 +418,9 @@ function stopCamera() {
   video.srcObject = null;
   trackingContext.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
   stabilizer.reset();
+  calibrationRun = null;
+  $("calibrate").disabled = true;
+  $("calibrate").textContent = "Calibrate cursor";
   lastStableGesture = "None";
   stablePinch = false;
   $("gesture").textContent = "Waiting for hand";
@@ -475,6 +497,8 @@ function trackFrame(now) {
 
   if (result.landmarks?.length) {
     const landmarks = result.landmarks[0];
+    const wasCalibrating = !!calibrationRun;
+    if (wasCalibrating) collectCalibrationSample(landmarks[8], now);
     drawLandmarks(landmarks, width, height);
     const category = geometryOnlyFallback ? null : selectBestModelGesture(result.gestures?.[0] || []);
     const raw = detectGesture(landmarks, stablePinch, category?.categoryName || null, category?.score || 0);
@@ -486,7 +510,7 @@ function trackFrame(now) {
     $("gesture").textContent = labels[stable] || labels.Unclear;
     updateCursor(landmarks[8]);
     if (stable !== lastStableGesture) {
-      handleStableGesture(stable, lastStableGesture, now, landmarks);
+      if (!wasCalibrating) handleStableGesture(stable, lastStableGesture, now, landmarks);
       lastStableGesture = stable;
     }
   } else {
@@ -525,9 +549,72 @@ function selectBestModelGesture(categories) {
     .filter(category => SUPPORTED_MODEL_GESTURES.has(category.categoryName))
     .sort((a, b) => b.score - a.score)[0] || null;
 }
+function startCursorCalibration() {
+  if (!cameraActive) {
+    showToast("Enable the camera first.");
+    return;
+  }
+  calibrationRun = { startedAt: performance.now(), minX: 1, maxX: 0, minY: 1, maxY: 0, frames: 0 };
+  cursorFilter.reset(0.5, 0.5);
+  $("calibrate").disabled = true;
+  $("calibrate").textContent = "Calibrating…";
+  $("gestureConfidence").textContent = "Sweep your index finger across your comfortable range for 5 seconds";
+  showToast("Calibration started — slowly trace a wide box with your index finger.");
+}
+function collectCalibrationSample(indexTip, now) {
+  if (!calibrationRun) return false;
+  const x = mirrorCamera ? 1 - indexTip.x : indexTip.x;
+  calibrationRun.minX = Math.min(calibrationRun.minX, x);
+  calibrationRun.maxX = Math.max(calibrationRun.maxX, x);
+  calibrationRun.minY = Math.min(calibrationRun.minY, indexTip.y);
+  calibrationRun.maxY = Math.max(calibrationRun.maxY, indexTip.y);
+  calibrationRun.frames++;
+  const remaining = Math.max(0, 5 - (now - calibrationRun.startedAt) / 1000);
+  $("gestureConfidence").textContent = "Calibrating · " + remaining.toFixed(1) + "s · move across your usable range";
+  if (remaining > 0) return true;
+
+  const run = calibrationRun;
+  calibrationRun = null;
+  const spanX = run.maxX - run.minX;
+  const spanY = run.maxY - run.minY;
+  if (run.frames < 20 || spanX < 0.16 || spanY < 0.18) {
+    $("calibrate").disabled = false;
+    $("calibrate").textContent = "Calibrate cursor";
+    $("gestureConfidence").textContent = "Not enough movement captured — try a wider, slower sweep";
+    showToast("Calibration needs a wider range. Try again and move in all directions.");
+    return false;
+  }
+  const padX = Math.max(0.025, spanX * 0.12);
+  const padY = Math.max(0.025, spanY * 0.12);
+  cursorCalibration = {
+    minX: clamp(run.minX - padX, 0, 0.9),
+    maxX: clamp(run.maxX + padX, 0.1, 1),
+    minY: clamp(run.minY - padY, 0, 0.9),
+    maxY: clamp(run.maxY + padY, 0.1, 1),
+    calibrated: true
+  };
+  try { localStorage.setItem("airhand-cursor-calibration", JSON.stringify(cursorCalibration)); } catch { /* optional preference */ }
+  cursorFilter.reset(0.5, 0.5);
+  $("calibrate").disabled = false;
+  $("calibrate").textContent = "Recalibrate";
+  $("gestureConfidence").textContent = "Cursor calibrated to your range";
+  showToast("Cursor calibrated! Your movement range is saved on this device.");
+  playTone(740, 0.09);
+  return false;
+}
+function mapCalibratedRange(value, min, max) {
+  return clamp((value - min) / Math.max(0.001, max - min), 0, 1);
+}
 function updateCursor(indexTip) {
+  if (calibrationRun) {
+    $("cursor").style.left = "50%";
+    $("cursor").style.top = "50%";
+    return;
+  }
   const targetX = mirrorCamera ? 1 - indexTip.x : indexTip.x;
-  const point = cursorFilter.update(targetX, indexTip.y);
+  const mappedX = mapCalibratedRange(targetX, cursorCalibration.minX, cursorCalibration.maxX);
+  const mappedY = mapCalibratedRange(indexTip.y, cursorCalibration.minY, cursorCalibration.maxY);
+  const point = cursorFilter.update(mappedX, mappedY);
   $("cursor").style.left = (clamp(point.x, 0.01, 0.99) * 100) + "%";
   $("cursor").style.top = (clamp(point.y, 0.05, 0.95) * 100) + "%";
   $("cursor").style.opacity = currentMode === "cursor" ? "1" : ".28";
@@ -656,6 +743,34 @@ function renderGame() {
   gameContext.lineTo(playerX + 22, playerTop + 28);
   gameContext.stroke();
 
+  for (const star of game.stars) {
+    const y = game.ground - star.lift + Math.sin(star.phase) * 3;
+    gameContext.save();
+    gameContext.translate(star.x, y);
+    gameContext.rotate(star.phase * 0.12);
+    gameContext.fillStyle = "#ffc44d";
+    gameContext.strokeStyle = "#f1a72c";
+    gameContext.lineWidth = 1.5;
+    gameContext.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const radius = i % 2 === 0 ? star.size : star.size * 0.48;
+      const angle = -Math.PI / 2 + i * Math.PI / 5;
+      if (i === 0) gameContext.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+      else gameContext.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    gameContext.closePath();
+    gameContext.fill();
+    gameContext.stroke();
+    gameContext.restore();
+  }
+  for (const popup of game.popups) {
+    gameContext.globalAlpha = clamp(popup.life / 0.9, 0, 1);
+    gameContext.fillStyle = "#1e7a63";
+    gameContext.font = "700 13px Manrope, sans-serif";
+    gameContext.textAlign = "center";
+    gameContext.fillText(popup.label, popup.x, popup.y);
+    gameContext.globalAlpha = 1;
+  }
   for (const obstacle of game.obstacles) {
     gameContext.fillStyle = "#ff9b70";
     roundRect(gameContext, obstacle.x, game.ground - obstacle.height, obstacle.width, obstacle.height, 4);
@@ -664,6 +779,8 @@ function renderGame() {
   }
   $("score").textContent = String(Math.floor(game.score)).padStart(3, "0");
   $("bestScore").textContent = String(game.best).padStart(3, "0");
+  if ($("starsCount")) $("starsCount").textContent = String(game.collected);
+  if ($("comboCount")) $("comboCount").textContent = game.combo > 1 ? "x" + game.combo : "—";
 }
 function startGame() {
   cancelAnimationFrame(gameFrameRequest);
@@ -674,6 +791,12 @@ function startGame() {
   game.playerY = 0;
   game.velocityY = 0;
   game.obstacles = [];
+  game.stars = [];
+  game.popups = [];
+  game.combo = 0;
+  game.comboTimer = 0;
+  game.collected = 0;
+  game.starSpawnIn = 1.3;
   game.spawnIn = .65;
   lastGameFrame = 0;
   $("overlay").classList.add("hidden");
@@ -689,7 +812,14 @@ function gameFrame(now) {
   const height = gameCanvas.clientHeight;
   game.ground = height - 32;
   game.score += dt * 10;
-  game.speed = Math.min(440, 250 + game.score * .42);
+  game.comboTimer = Math.max(0, game.comboTimer - dt);
+  if (game.comboTimer === 0) game.combo = 0;
+  const pace = game.difficulty === "chill"
+    ? { base: 205, cap: 350, spawn: 1.36, minSpawn: 0.86 }
+    : game.difficulty === "challenge"
+      ? { base: 300, cap: 560, spawn: 0.78, minSpawn: 0.46 }
+      : { base: 250, cap: 440, spawn: 1.05, minSpawn: 0.62 };
+  game.speed = Math.min(pace.cap, pace.base + game.score * .42);
   game.velocityY += 1120 * dt;
   game.playerY = Math.min(0, game.playerY + game.velocityY * dt);
   if (game.playerY === 0) game.velocityY = 0;
@@ -698,9 +828,38 @@ function gameFrame(now) {
   if (game.spawnIn <= 0) {
     const obstacleHeight = 19 + Math.random() * 18;
     game.obstacles.push({ x: width + 12, width: 17 + Math.random() * 9, height: obstacleHeight });
-    game.spawnIn = Math.max(.62, 1.05 + Math.random() * .55 - game.score / 280);
+    game.spawnIn = Math.max(pace.minSpawn, pace.spawn + Math.random() * .55 - game.score / 280);
+  }
+  game.starSpawnIn -= dt;
+  if (game.starSpawnIn <= 0) {
+    game.stars.push({ x: width + 18, lift: 38 + Math.random() * 62, size: 8, phase: Math.random() * Math.PI * 2 });
+    game.starSpawnIn = 1.4 + Math.random() * 1.25;
   }
   game.obstacles.forEach(obstacle => obstacle.x -= game.speed * dt);
+  game.stars.forEach(star => { star.x -= game.speed * dt; star.phase += dt * 4; });
+  game.stars = game.stars.filter(star => star.x > -20);
+  game.popups.forEach(popup => { popup.life -= dt; popup.y -= dt * 24; });
+  game.popups = game.popups.filter(popup => popup.life > 0);
+  const playerCenterX = playerX + 12;
+  const playerCenterY = playerTop + 12;
+  game.stars = game.stars.filter(star => {
+    const starY = game.ground - star.lift;
+    if (Math.abs(playerCenterX - star.x) < 21 && Math.abs(playerCenterY - starY) < 23) {
+      game.combo = game.comboTimer > 0 ? game.combo + 1 : 1;
+      game.comboTimer = 2.6;
+      game.collected++;
+      const bonus = 20 * Math.min(game.combo, 5);
+      game.score += bonus;
+      game.popups.push({ x: star.x, y: starY, label: "+" + bonus, life: 0.9 });
+      playTone(620 + Math.min(game.combo, 5) * 90, 0.08);
+      if (game.collected >= lastStarMilestone + 5) {
+        lastStarMilestone = Math.floor(game.collected / 5) * 5;
+        showToast("Star streak! " + game.collected + " collected ✨");
+      }
+      return false;
+    }
+    return true;
+  });
   game.obstacles = game.obstacles.filter(obstacle => obstacle.x + obstacle.width > -2);
 
   const playerX = width * .17;
@@ -715,8 +874,46 @@ function gameFrame(now) {
 }
 function jump() {
   if (game.playerY >= -0.5 && game.velocityY >= 0) {
-    game.velocityY = -410;
+    game.velocityY = game.difficulty === "challenge" ? -445 : game.difficulty === "chill" ? -390 : -410;
+    playTone(300, 0.055);
   }
+}
+function setSoundEnabled(enabled) {
+  soundEnabled = enabled;
+  if (soundEnabled && !audioContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) audioContext = new AudioContextClass();
+    else soundEnabled = false;
+  }
+  if (soundEnabled && audioContext?.state === "suspended") audioContext.resume();
+  $("soundToggle").textContent = soundEnabled ? "♫ Sound: on" : "♫ Sound: off";
+  $("soundToggle").setAttribute("aria-pressed", String(soundEnabled));
+  if (!soundEnabled && audioContext?.state === "running") audioContext.suspend();
+  showToast(soundEnabled ? "Sound effects enabled." : "Sound effects muted.");
+}
+function playTone(frequency = 520, duration = 0.08) {
+  if (!soundEnabled || !audioContext || audioContext.state !== "running") return;
+  try {
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.10, audioContext.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + duration);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + duration + 0.015);
+  } catch (error) { console.warn("Sound effect unavailable:", error); }
+}
+function cycleDifficulty() {
+  const order = ["chill", "normal", "challenge"];
+  const labels = { chill: "☁ Pace: chill", normal: "⚡ Pace: normal", challenge: "🔥 Pace: challenge" };
+  game.difficulty = order[(order.indexOf(game.difficulty) + 1) % order.length];
+  $("difficultyToggle").textContent = labels[game.difficulty];
+  $("difficultyToggle").setAttribute("aria-pressed", String(game.difficulty === "challenge"));
+  showToast("Runner pace: " + game.difficulty + ".");
 }
 function pauseGame(showOverlay = true) {
   if (!game.playing) return;
@@ -753,6 +950,9 @@ function showGameOverlay(title, message, button) {
 $("start").addEventListener("click", startCamera);
 $("start2").addEventListener("click", startCamera);
 $("stopCamera").addEventListener("click", stopCamera);
+$("calibrate").addEventListener("click", startCursorCalibration);
+$("soundToggle").addEventListener("click", () => setSoundEnabled(!soundEnabled));
+$("difficultyToggle").addEventListener("click", cycleDifficulty);
 $("landmarkToggle").addEventListener("change", event => { showLandmarks = event.target.checked; });
 $("mirrorToggle").addEventListener("change", event => { mirrorCamera = event.target.checked; video.style.transform = mirrorCamera ? "scaleX(-1)" : "none"; });
 $("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; });
