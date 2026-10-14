@@ -29,7 +29,10 @@ Camera access requires HTTPS or localhost. MediaPipe's JavaScript/WASM runtime a
 | Peace sign (Victory) | Switch between cursor and runner |
 | Open palm | Start or resume the runner |
 | Thumbs-up | Pause the runner |
-| Tap/click the game canvas | Jump as a manual fallback |\n| Space key | Jump in the runner |\n| P key | Pause/resume the runner |\n| 1 / 2 keys | Switch between cursor and runner |
+| Tap/click the game canvas | Jump as a manual fallback |
+| Space key | Jump in the runner |
+| P key | Pause/resume the runner |
+| 1 / 2 keys | Switch between cursor and runner |
 
 ## Test and quality checks
 
