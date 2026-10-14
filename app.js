@@ -635,6 +635,7 @@ function renderGame() {
   $("bestScore").textContent = String(game.best).padStart(3, "0");
 }
 function startGame() {
+  cancelAnimationFrame(gameFrameRequest);
   game.playing = true;
   game.paused = false;
   game.score = 0;
@@ -689,6 +690,7 @@ function jump() {
 function pauseGame(showOverlay = true) {
   if (!game.playing) return;
   game.paused = true;
+  cancelAnimationFrame(gameFrameRequest);
   if (showOverlay) showGameOverlay("Paused", "Show an open palm or press resume to continue.", "Resume");
 }
 function resumeGame() {
@@ -699,6 +701,7 @@ function resumeGame() {
   gameFrameRequest = requestAnimationFrame(gameFrame);
 }
 function endGame() {
+  cancelAnimationFrame(gameFrameRequest);
   game.playing = false;
   game.paused = false;
   const score = Math.floor(game.score);
@@ -758,6 +761,7 @@ window.addEventListener("keydown", event => {
 window.addEventListener("resize", resizeCanvases);
 window.addEventListener("pagehide", () => {
   pageIsClosing = true;
+  cancelAnimationFrame(gameFrameRequest);
   stopCamera();
 });
 document.addEventListener("visibilitychange", () => {
