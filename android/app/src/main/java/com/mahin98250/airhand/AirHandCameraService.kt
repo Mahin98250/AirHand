@@ -48,6 +48,7 @@ class AirHandCameraService : LifecycleService() {
     private val backHoldGate = GestureHoldGate()
     private val homeHoldGate = GestureHoldGate()
     private val recentsHoldGate = GestureHoldGate()
+    @Volatile private var actionsPaused = false
     private var lastBackAtMs = 0L
     private var lastHomeAtMs = 0L
     private var lastRecentsAtMs = 0L
@@ -60,7 +61,21 @@ class AirHandCameraService : LifecycleService() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_TOGGLE_PAUSE) {
+            if (isRunning) {
+                actionsPaused = !actionsPaused
+                GestureCommandRouter.enabled = !actionsPaused
+                GestureCommandRouter.lastDetectionAtMs = 0L
+                resetNavigationGestureState()
+                updateNotificationText(
+                    if (actionsPaused) "Actions paused. Camera is still on; tap Resume or Stop here."
+                    else "Actions resumed. Pinch to tap; hold navigation poses deliberately."
+                )
+            }
+            return START_NOT_STICKY
+        }
         if (isRunning) return START_NOT_STICKY
+        actionsPaused = false
 
         createNotificationChannel()
         try {
@@ -295,12 +310,28 @@ class AirHandCameraService : LifecycleService() {
 
     private fun buildNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_menu_view)
-        .setContentTitle("AirHand gesture control is on")
-        .setContentText("Pinch: tap • open hand: scroll • peace: Back • thumb: Home • fist: recent apps. Tap Stop to end control.")
+        .setContentTitle(if (actionsPaused) "AirHand actions are paused" else "AirHand gesture control is on")
+        .setContentText(
+            if (actionsPaused) "Camera tracking remains on, but gestures cannot tap or navigate."
+            else "Pinch: tap • open hand: scroll • peace: Back • thumb: Home • fist: recent apps."
+        )
         .setOngoing(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
-        .addAction(android.R.drawable.ic_media_pause, "Stop", stopPendingIntent())
+        .addAction(
+            if (actionsPaused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
+            if (actionsPaused) "Resume" else "Pause",
+            pausePendingIntent()
+        )
+        .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent())
         .build()
+
+    private fun pausePendingIntent(): PendingIntent {
+        val intent = Intent(this, AirHandCameraService::class.java).apply { action = ACTION_TOGGLE_PAUSE }
+        return PendingIntent.getService(
+            this, PAUSE_REQUEST_CODE, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
 
     private fun stopPendingIntent(): PendingIntent {
         val intent = Intent(this, AirHandCameraService::class.java).apply { action = ACTION_STOP }
@@ -323,11 +354,19 @@ class AirHandCameraService : LifecycleService() {
         if (!isRunning || shuttingDown) return
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentTitle("AirHand gesture control")
-            .setContentText(message.take(120))
+            .setContentTitle(if (actionsPaused) "AirHand actions are paused" else "AirHand gesture control")
+            .setContentText(
+                if (actionsPaused) "Actions are paused. Camera remains active. Resume or Stop here."
+                else message.take(120)
+            )
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .addAction(android.R.drawable.ic_media_pause, "Stop", stopPendingIntent())
+            .addAction(
+                if (actionsPaused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
+                if (actionsPaused) "Resume" else "Pause",
+                pausePendingIntent()
+            )
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent())
             .build()
         try {
             val manager = getSystemService(NotificationManager::class.java)
@@ -338,6 +377,7 @@ class AirHandCameraService : LifecycleService() {
     private fun stopTracking() {
         shuttingDown = true
         isRunning = false
+        actionsPaused = false
         GestureCommandRouter.stop()
         try { analysisUseCase?.clearAnalyzer() } catch (_: Exception) { }
         try { cameraProvider?.unbindAll() } catch (_: Exception) { }
@@ -398,9 +438,11 @@ class AirHandCameraService : LifecycleService() {
 
     companion object {
         const val ACTION_STOP = "com.mahin98250.airhand.STOP_GESTURE_CONTROL"
+        const val ACTION_TOGGLE_PAUSE = "com.mahin98250.airhand.TOGGLE_GESTURE_PAUSE"
         private const val CHANNEL_ID = "airhand_gesture_control"
         private const val NOTIFICATION_ID = 4107
         private const val STOP_REQUEST_CODE = 4108
+        private const val PAUSE_REQUEST_CODE = 4109
         private const val CLICK_CONFIDENCE = 0.85f
         private const val CLICK_COOLDOWN_MS = 450L
         private const val SCROLL_THRESHOLD = 0.13f
