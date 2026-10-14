@@ -519,6 +519,22 @@ $("play").addEventListener("click", () => {
 gameCanvas.addEventListener("pointerdown", () => {
   if (currentMode === "game" && game.playing && !game.paused) jump();
 });
+window.addEventListener("keydown", event => {
+  if (event.repeat || event.target?.matches?.("button, input, select, textarea")) return;
+  if (event.code === "Space" && currentMode === "game") {
+    event.preventDefault();
+    if (!game.playing) startGame();
+    else if (!game.paused) jump();
+    return;
+  }
+  if (event.key.toLowerCase() === "p" && currentMode === "game" && game.playing) {
+    if (game.paused) resumeGame();
+    else pauseGame();
+    return;
+  }
+  if (event.key === "1") switchMode("cursor");
+  if (event.key === "2") switchMode("game");
+});
 window.addEventListener("resize", resizeCanvases);
 window.addEventListener("pagehide", () => {
   pageIsClosing = true;
