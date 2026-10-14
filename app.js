@@ -230,6 +230,7 @@ let GestureRecognizer = null;
 let HandLandmarker = null;
 let SteeringController = null;
 let driveSteering = null;
+let driveKeyboardSteer = null;
 let gestureRecognizer = null;
 let geometryOnlyFallback = false;
 let mediaStream = null;
@@ -416,7 +417,7 @@ async function startCamera() {
     if (!SteeringController) {
       const steeringModule = await import("./steering-engine.js");
       SteeringController = steeringModule.SteeringController;
-      driveSteering = new SteeringController();
+      driveSteering = new SteeringController({ maxTurnRadians: 0.48, smoothing: 0.42 });
     }
     if (!FilesetResolver) {
       const mediaPipeModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs");
@@ -627,7 +628,7 @@ function trackFrame(now) {
       driveLatestHands = hands;
       if (hands.length >= 2) {
         const steering = driveSteering.update(hands[0], hands[1], now);
-        drive.steer = steering.value;
+        if (driveKeyboardSteer === null) drive.steer = steering.value;
         $("driveGuidance").textContent = steering.detected
           ? "Two hands locked · steering confidence " + Math.round(steering.confidence * 100) + "%"
           : "Keep both hands apart and inside the frame";
@@ -1054,7 +1055,7 @@ function renderDrive() {
     drawDriveCar(ctx, x, y, .12 + t * .72, car.color);
   }
   const playerRoad = driveRoadGeometry(width, height, height * .89);
-  drawDriveCar(ctx, width * .5 + drive.steer * width * .23, height * .86, 1.12, "#43d8ff");
+  drawDriveCar(ctx, playerRoad.center + drive.lane * width * .12, height * .86, 1.12, "#43d8ff");
   // Steering arc and confidence bar make the controller's response visible.
   ctx.strokeStyle = "#e8f5ff88"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(width * .5, height * .89, 28, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke();
   ctx.strokeStyle = "#69e6ff"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(width * .5, height * .89); ctx.lineTo(width * .5 + drive.steer * 25, height * .89 - 28); ctx.stroke();
@@ -1081,7 +1082,7 @@ function driveFrame(now) {
   drive.spawnIn -= dt;
   if (drive.spawnIn <= 0) { drive.traffic.push({ depth: .03, lane: (Math.random() * 2 - 1) * .7, color: ["#ff7d76", "#f4c85c", "#8f9fff"][Math.floor(Math.random() * 3)] }); drive.spawnIn = Math.max(.62, 1.5 - drive.speed / 250 + Math.random() * .7); }
   drive.traffic.forEach(car => { car.depth += dt * (0.12 + drive.speed / 900); });
-  const collision = drive.traffic.some(car => car.depth > .78 && car.depth < .91 && Math.abs(car.lane - drive.lane) < .24);
+  const collision = drive.traffic.some(car => car.depth > .78 && car.depth < .91 && Math.abs(car.lane - drive.lane) < .22);
   drive.traffic = drive.traffic.filter(car => car.depth < 1.05);
   renderDrive();
   if (collision) { endDrive(); return; }
@@ -1095,7 +1096,7 @@ function calibrateDriveSteering() {
     $("driveGuidance").textContent = "Show both hands, spread them apart, and hold still to calibrate";
     showToast("Two visible hands are needed to calibrate steering."); return;
   }
-  drive.steer = 0; $("driveGuidance").textContent = "Steering calibrated · turn hands gently left or right"; showToast("Air steering calibrated!");
+  drive.steer = 0; driveKeyboardSteer = null; $("driveGuidance").textContent = "Calibrated ✓ · turn both hands like a wheel; small turns now respond"; showToast("Air steering calibrated!");
 }
 let driveLatestHands = null;
 
@@ -1457,7 +1458,8 @@ window.addEventListener("keydown", event => {
   if (event.repeat || event.target?.matches?.("button, input, select, textarea")) return;
   if (currentMode === "drive" && ["ArrowLeft", "ArrowRight", "KeyA", "KeyD"].includes(event.code)) {
     event.preventDefault();
-    drive.steer = (event.code === "ArrowLeft" || event.code === "KeyA") ? -0.85 : 0.85;
+    driveKeyboardSteer = (event.code === "ArrowLeft" || event.code === "KeyA") ? -0.85 : 0.85;
+    drive.steer = driveKeyboardSteer;
     return;
   }
   if (event.code === "Space" && currentMode === "drive") {
@@ -1480,8 +1482,9 @@ window.addEventListener("keydown", event => {
   if (event.key === "2") switchMode("game");
 });
 window.addEventListener("keyup", event => {
-  if (currentMode === "drive" && ["ArrowLeft", "ArrowRight", "KeyA", "KeyD"].includes(event.code)) drive.steer = 0;
+  if (currentMode === "drive" && ["ArrowLeft", "ArrowRight", "KeyA", "KeyD"].includes(event.code)) { driveKeyboardSteer = null; drive.steer = driveSteering?.value ?? 0; }
 });
+window.addEventListener("blur", () => { driveKeyboardSteer = null; if (currentMode === "drive") drive.steer = driveSteering?.value ?? 0; });
 window.addEventListener("resize", () => { resizeCanvases(); fitDriveCanvas(); renderDrive(); });
 window.addEventListener("pageshow", () => {
   if (cameraActive && mediaStream?.getVideoTracks().every(track => track.readyState === "ended")) handleCameraTrackEnded();
