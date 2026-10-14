@@ -247,6 +247,8 @@ let lastThumbToggle = 0;
 let lastGameFrame = 0;
 let stablePinch = false;
 let dwellEnabled = false;
+let dwellDurationMs = 850;
+let interactionsLocked = false;
 let dwellCandidate = null;
 let dwellStartedAt = 0;
 let dwellTriggeredTarget = null;
@@ -449,6 +451,8 @@ function stopMediaTracks() {
   }
 }
 function stopCamera() {
+  cancelVirtualDrag("Camera stopped");
+  resetDwellProgress();
   cameraActive = false;
   cancelAnimationFrame(trackingFrame);
   // Keep the runner alive: it also supports keyboard and pointer controls without a camera.
@@ -722,6 +726,8 @@ function updateCursor(indexTip, now = performance.now()) {
     const rect = document.querySelector(".cards").getBoundingClientRect();
     const target = document.elementFromPoint(rect.left + clamp(point.x, 0.01, 0.99) * rect.width, rect.top + clamp(point.y, 0.05, 0.95) * rect.height)?.closest(".mini");
     if (target) target.classList.add("hovered");
+    document.querySelectorAll(".mini.drop-target").forEach(tile => tile.classList.remove("drop-target"));
+    if (dragSource && target && target !== dragSource) target.classList.add("drop-target");
     updateDwellTarget(target, now);
   }
 }
@@ -736,37 +742,56 @@ function selectVirtualTarget(target, action = "selected") {
   const names = { explore: "Explore", create: "Create", discover: "Discover" };
   showToast((names[target.dataset.tile] || "Tile") + (action === "selected" ? " selected" : " · " + action));
 }
+function resetDwellProgress() {
+  dwellCandidate = null; dwellStartedAt = 0; dwellTriggeredTarget = null;
+  const progress = $("dwellProgress");
+  if (progress) { progress.classList.remove("active"); progress.querySelector("span").style.width = "0%"; }
+}
 function updateDwellTarget(target, now = performance.now()) {
   const progress = $("dwellProgress"), fill = progress.querySelector("span");
-  if (!dwellEnabled || stablePinch || calibrationRun || !target) {
-    dwellCandidate = null; dwellStartedAt = 0; dwellTriggeredTarget = null;
-    progress.classList.remove("active"); fill.style.width = "0%"; return;
+  if (!dwellEnabled || interactionsLocked || stablePinch || calibrationRun || !target) {
+    resetDwellProgress(); return;
   }
   if (target !== dwellCandidate) { dwellCandidate = target; dwellStartedAt = now; dwellTriggeredTarget = null; }
-  const ratio = clamp((now - dwellStartedAt) / 850, 0, 1);
+  const ratio = clamp((now - dwellStartedAt) / dwellDurationMs, 0, 1);
   progress.classList.add("active"); fill.style.width = (ratio * 100) + "%";
   if (ratio >= 1 && dwellTriggeredTarget !== target) {
-    dwellTriggeredTarget = target; selectVirtualTarget(target, "Dwell click"); playTone(640, 0.055);
+    dwellTriggeredTarget = target; selectVirtualTarget(target, "Dwell click");
+    $("interactionLockStatus").textContent = "Dwell selection · " + (target.dataset.tile || "tile");
+    playTone(640, 0.055);
   }
 }
 function beginVirtualDrag() {
-  if (currentMode !== "cursor") return;
+  if (currentMode !== "cursor" || interactionsLocked) {
+    if (interactionsLocked) { $("interactionLockStatus").textContent = "Interactions locked · unlock to use pinch or dwell"; showToast("Interactions are locked."); }
+    return;
+  }
   const target = getVirtualTargetAtCursor();
-  if (!target) { dragSource = null; showToast("Move over a tile before pinching to drag."); return; }
+  if (!target) { dragSource = null; $("interactionLockStatus").textContent = "No tile under cursor · move over a tile first"; showToast("Move over a tile before pinching to drag."); return; }
   dragSource = target; dragSource.classList.add("dragging", "selected");
-  dwellCandidate = null;
+  resetDwellProgress();
+  $("interactionLockStatus").textContent = "Dragging " + (target.dataset.tile || "tile") + " · release over a tile";
   $("gestureConfidence").textContent = "Dragging · release pinch over another tile to drop";
 }
+function cancelVirtualDrag(reason = "Drag cancelled") {
+  if (!dragSource) return;
+  dragSource.classList.remove("dragging", "drop-target");
+  dragSource.classList.remove("selected"); dragSource = null;
+  document.querySelectorAll(".mini.drop-target").forEach(tile => tile.classList.remove("drop-target"));
+  $("interactionLockStatus").textContent = reason + " · no tile moved";
+}
 function finishVirtualDrag() {
-  if (!dragSource) { const target = getVirtualTargetAtCursor(); if (target && currentMode === "cursor") selectVirtualTarget(target); return; }
+  if (!dragSource) { const target = getVirtualTargetAtCursor(); if (target && currentMode === "cursor" && !interactionsLocked) selectVirtualTarget(target); return; }
   const source = dragSource, target = getVirtualTargetAtCursor();
   source.classList.remove("dragging"); dragSource = null;
+  document.querySelectorAll(".mini.drop-target").forEach(tile => tile.classList.remove("drop-target"));
+  if (interactionsLocked) { source.classList.remove("selected"); $("interactionLockStatus").textContent = "Interactions locked · drag cancelled"; showToast("Drag cancelled because interactions are locked."); return; }
   if (target && target !== source) {
     const tiles = [...document.querySelectorAll(".mini")], a = tiles.indexOf(source), b = tiles.indexOf(target);
     if (a < b) target.after(source); else target.before(source);
-    selectVirtualTarget(source, "dropped"); showToast("Tile moved into position.");
-  } else if (target === source) selectVirtualTarget(source);
-  else { source.classList.remove("selected"); showToast("Drag cancelled — release over a tile to drop."); }
+    selectVirtualTarget(source, "dropped"); $("interactionLockStatus").textContent = "Drop complete · " + (source.dataset.tile || "tile"); showToast("Tile moved into position.");
+  } else if (target === source) { selectVirtualTarget(source); $("interactionLockStatus").textContent = "Drag ended · tile unchanged"; }
+  else { source.classList.remove("selected"); $("interactionLockStatus").textContent = "Drop cancelled · release over a tile"; showToast("Drag cancelled — release over a tile to drop."); }
 }
 function handleStableGesture(gesture, previous, now, landmarks = null, source = null) {
   const reliableDiscreteGesture = geometryOnlyFallback || source === "model";
@@ -813,6 +838,8 @@ function activateVirtualTarget() {
 }
 
 function switchMode(mode) {
+  if (currentMode !== mode) cancelVirtualDrag("Mode changed");
+  resetDwellProgress();
   currentMode = mode;
   document.querySelectorAll(".tab").forEach(button => {
     const selected = button.dataset.mode === mode;
@@ -1111,10 +1138,25 @@ $("mirrorToggle").addEventListener("change", event => {
 $("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; });
 $("dwellToggle").addEventListener("change", event => {
   dwellEnabled = event.target.checked;
-  $("dwellValue").textContent = dwellEnabled ? "On · 850 ms" : "Off";
-  dwellCandidate = null; dwellStartedAt = 0; dwellTriggeredTarget = null;
-  $("dwellProgress").classList.remove("active"); $("dwellProgress").querySelector("span").style.width = "0%";
-  showToast(dwellEnabled ? "Dwell click enabled — pause over a tile to select it." : "Dwell click disabled.");
+  resetDwellProgress();
+  $("dwellValue").textContent = dwellEnabled ? "On · " + dwellDurationMs + " ms" : "Off";
+  $("interactionLockStatus").textContent = interactionsLocked ? "Interactions locked" : (dwellEnabled ? "Dwell ready · pause over a tile" : "Pinch to drag · release to drop");
+  showToast(dwellEnabled ? "Dwell click enabled." : "Dwell click disabled.");
+});
+$("dwellDuration").addEventListener("input", event => {
+  dwellDurationMs = Number(event.target.value);
+  $("dwellDurationValue").textContent = dwellDurationMs + " ms";
+  if (dwellEnabled) $("dwellValue").textContent = "On · " + dwellDurationMs + " ms";
+  resetDwellProgress();
+});
+$("interactionLock").addEventListener("click", () => {
+  interactionsLocked = !interactionsLocked;
+  if (interactionsLocked) { cancelVirtualDrag("Interactions locked"); resetDwellProgress(); }
+  const button = $("interactionLock");
+  button.setAttribute("aria-pressed", String(interactionsLocked));
+  button.textContent = interactionsLocked ? "🔒 Interactions locked" : "🔓 Interactions unlocked";
+  $("interactionLockStatus").textContent = interactionsLocked ? "Locked · cursor moves, clicks and drag are disabled" : "Unlocked · pinch to drag, dwell optional";
+  showToast(interactionsLocked ? "Interactions locked — cursor movement continues." : "Interactions unlocked.");
 });
 $("action").addEventListener("click", () => {
   if (!cameraActive) return startCamera();
