@@ -339,6 +339,23 @@ function setReady(title, message) {
   $("readyTitle").textContent = title;
   $("readyText").textContent = message;
 }
+function describeCameraError(error) {
+  const name = error?.name || "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") return "Camera permission was blocked. Allow camera access in browser or site settings, then try again.";
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") return "No camera was found. Connect or enable a camera, then try again.";
+  if (name === "NotReadableError" || name === "TrackStartError") return "The camera is busy or unavailable. Close other apps using it, then try again.";
+  if (name === "OverconstrainedError") return "This camera cannot meet the requested video settings. Try another camera or browser.";
+  if (name === "AbortError") return "Camera startup was interrupted. Try enabling the camera again.";
+  return error?.message || "Camera could not start. Check permissions and try again.";
+}
+
+function handleCameraTrackEnded() {
+  if (!cameraActive) return;
+  stopCamera();
+  setReady("Camera connection lost", "The camera stopped unexpectedly. Check browser permission or reconnect it, then enable the camera again.");
+  showToast("Camera disconnected — reconnect and try again.");
+}
+
 function updateCameraUI(active) {
   cameraActive = active;
   $("status").textContent = active ? "Camera on" : "Camera off";
@@ -449,6 +466,7 @@ async function startCamera() {
     fpsWindowStart = performance.now();
     resizeCanvases();
     updateCameraUI(true);
+    mediaStream?.getVideoTracks().forEach(track => track.addEventListener("ended", handleCameraTrackEnded, { once: true }));
     trackingFrame = requestAnimationFrame(trackFrame);
     if (geometryOnlyFallback) {
       setReady("Fallback tracking is live", "Gesture model unavailable; geometric detection is active.");
@@ -1257,6 +1275,9 @@ window.addEventListener("keydown", event => {
   if (event.key === "2") switchMode("game");
 });
 window.addEventListener("resize", resizeCanvases);
+window.addEventListener("pageshow", () => {
+  if (cameraActive && mediaStream?.getVideoTracks().every(track => track.readyState === "ended")) handleCameraTrackEnded();
+});
 video.addEventListener("loadedmetadata", fitCameraFrameToVideo);
 window.addEventListener("pagehide", () => {
   pageIsClosing = true;
