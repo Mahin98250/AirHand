@@ -812,7 +812,7 @@ function renderGame() {
   $("score").textContent = String(Math.floor(game.score)).padStart(3, "0");
   $("bestScore").textContent = String(game.best).padStart(3, "0");
   if ($("starsCount")) $("starsCount").textContent = String(game.collected);
-  if ($("comboCount")) $("comboCount").textContent = game.combo > 1 ? "x" + game.combo : "—";
+  if ($("comboCount")) $("comboCount").textContent = game.combo > 0 ? "x" + game.combo : "—";
 }
 function startGame() {
   cancelAnimationFrame(gameFrameRequest);
