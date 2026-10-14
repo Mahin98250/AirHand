@@ -59,7 +59,8 @@ export class SteeringController {
     // Ignore small natural tremor, then map wheel rotation into a bounded steering range.
     const deadZone = 0.018;
     const corrected = Math.abs(delta) <= deadZone ? 0 : Math.sign(delta) * (Math.abs(delta) - deadZone);
-    const target = clamp(corrected / this.maxTurnRadians, -1, 1);
+    // Screen-space wrist rotation is reversed for the driver's intuitive wheel direction.
+    const target = clamp(-corrected / this.maxTurnRadians, -1, 1);
     this.value += (target - this.value) * this.smoothing;
     this.confidence = clamp((pair.span - this.minHandSpan) / 0.20, 0.4, 1);
     return { value: this.value, confidence: this.confidence, detected: true, calibrated: true };
