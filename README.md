@@ -29,7 +29,7 @@ Camera access requires HTTPS or localhost. MediaPipe's JavaScript/WASM runtime a
 | Peace sign (Victory) | Switch between cursor and runner |
 | Open palm | Start or resume the runner |
 | Thumbs-up | Pause the runner |
-| Tap/click the game canvas | Jump as a manual fallback |
+| Tap/click the game canvas | Jump as a manual fallback |\n| Space key | Jump in the runner |\n| P key | Pause/resume the runner |\n| 1 / 2 keys | Switch between cursor and runner |
 
 ## Test and quality checks
 
@@ -38,5 +38,5 @@ Run the automated tests with `npm test` and JavaScript syntax checks with `npm r
 ## Honest limitations
 
 - The cursor is confined to the AirHand webpage. Ordinary browser pages cannot move the operating-system cursor or click arbitrary desktop applications without a separately installed native companion.
-- The built-in model recognizes a small set of standard gestures. Pinch is detected geometrically; accuracy depends on lighting, hand angle, distance, camera quality and device performance.
+- The built-in model recognizes a small set of standard gestures. If the trained gesture model cannot initialize, AirHand attempts a hand-landmark-only fallback. Pinch is detected geometrically; accuracy depends on lighting, hand angle, distance, camera quality and device performance.
 - The automated tests validate gesture math, filters and app wiring. A physical webcam test is still required to measure real-world recognition accuracy and responsiveness.
