@@ -119,7 +119,7 @@ async function startCamera() {
         gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
           ...modelOptions,
           baseOptions: {
-            modelAssetPath: "https://storage.googleapis.com/mediapipe-tasks/gesture_recognizer/gesture_recognizer.task",
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task",
             delegate: "CPU"
           }
         });
