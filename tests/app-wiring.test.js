@@ -18,7 +18,7 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the browser loads one deferred classic script and bundles local helpers", () => {
-  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-19"></script>'));
+  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-20"></script>'));
   assert.ok(app.includes("function detectGesture("));
   assert.ok(app.includes("function reportAirHandRuntimeError("));
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
@@ -153,4 +153,17 @@ test("Phase 6 safely cancels stale pinch/drag state after tracking or inference 
   const lossBranch = app.slice(app.indexOf("const lossAge = lastHandSeenAt"), app.indexOf("fpsFrames++"));
   assert.equal(lossBranch.includes('handleStableGesture("None", lastStableGesture'), false);
   assert.ok(lossBranch.includes("resetDwellProgress()"));
+});
+
+
+test("Phase 7 adds an Air Drive mode with two-hand tracking and a perspective road game", () => {
+  assert.ok(html.includes('data-mode="drive"'));
+  assert.ok(html.includes('id="driveCanvas"'));
+  assert.ok(html.includes('id="driveCalibrate"'));
+  assert.ok(app.includes('runningMode: "VIDEO", numHands: 2'));
+  assert.ok(app.includes('await import("./steering-engine.js")'));
+  assert.ok(app.includes("function renderDrive()"));
+  assert.ok(app.includes("function driveFrame(now)"));
+  assert.ok(app.includes("function calibrateDriveSteering()"));
+  assert.ok(app.includes('$("drivePlay").addEventListener("click"'));
 });
