@@ -18,7 +18,7 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the browser loads one deferred classic script and bundles local helpers", () => {
-  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-17"></script>'));
+  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-18"></script>'));
   assert.ok(app.includes("function detectGesture("));
   assert.ok(app.includes("function reportAirHandRuntimeError("));
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
@@ -121,4 +121,23 @@ test("Phase 4 persists validated preferences without persisting the interaction 
   assert.ok(app.includes("clamp(saved.cursorSensitivity, 0.12, 0.55)"));
   assert.ok(app.includes('localStorage.removeItem(PREFERENCES_KEY)'));
   assert.equal(app.includes("interactionsLocked, dwellDurationMs"), false);
+});
+
+
+test("Phase 5 explains common camera permission and device failures", () => {
+  assert.ok(app.includes("function describeCameraError(error)"));
+  for (const name of ["NotAllowedError", "NotFoundError", "NotReadableError", "OverconstrainedError", "AbortError"]) {
+    assert.ok(app.includes(name), "Missing camera error mapping: " + name);
+  }
+  assert.ok(app.includes("function handleCameraTrackEnded()"));
+  assert.ok(app.includes('track.addEventListener("ended", handleCameraTrackEnded'));
+  assert.ok(app.includes("Camera connection lost"));
+});
+
+test("Phase 5 adds accessible live status, canvas descriptions, and visible keyboard focus", () => {
+  assert.ok(html.includes('id="status" class="status" role="status" aria-live="polite"'));
+  assert.ok(html.includes('id="readyTitle" role="status" aria-live="polite"'));
+  assert.ok(html.includes('aria-label="Live camera preview for hand tracking"'));
+  assert.ok(html.includes('aria-label="Hand Runner game. Use Space to jump and P to pause."'));
+  assert.ok(html.includes('button:focus-visible,input:focus-visible,.tab:focus-visible'));
 });
