@@ -639,7 +639,7 @@ function startCursorCalibration() {
   if (!cameraActive) { showToast("Enable the camera first."); return; }
   calibrationFeedbackUntil = 0;
   calibrationFeedbackText = "";
-  calibrationRun = { startedAt: performance.now(), minX: 1, maxX: 0, minY: 0, maxY: 1, frames: 0, step: -1 };
+  calibrationRun = { startedAt: performance.now(), minX: 1, maxX: 0, minY: 1, maxY: 0, frames: 0, step: -1 };
   cursorFilter.reset(0.5, 0.5);
   $("calibrate").disabled = true;
   $("calibrate").textContent = "Calibrating…";
