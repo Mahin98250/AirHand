@@ -29,6 +29,8 @@ class AirHandInputMethodService : InputMethodService() {
     private var uppercase = false
     private var speechRecognizer: SpeechRecognizer? = null
     private var listening = false
+    // Invalidates callbacks when the keyboard closes or a voice session is cancelled.
+    private var voiceSessionId = 0L
 
     override fun onCreateInputView(): View {
         val root = LinearLayout(this).apply {
@@ -158,11 +160,20 @@ class AirHandInputMethodService : InputMethodService() {
             Toast.makeText(this, "No speech-recognition provider is available.", Toast.LENGTH_LONG).show()
             return
         }
+        val targetConnection = currentInputConnection
+        if (targetConnection == null) {
+            Toast.makeText(this, "Open a text field before starting voice typing.", Toast.LENGTH_LONG).show()
+            return
+        }
         try {
             val recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            val sessionId = ++voiceSessionId
             speechRecognizer = recognizer
             recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) { updateVoiceKey("Listening…") }
+                override fun onReadyForSpeech(params: Bundle?) {
+                    if (sessionId != voiceSessionId || !listening) return
+                    updateVoiceKey("Listening…")
+                }
                 override fun onBeginningOfSpeech() = Unit
                 override fun onRmsChanged(rmsdB: Float) = Unit
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
@@ -170,14 +181,18 @@ class AirHandInputMethodService : InputMethodService() {
                 override fun onPartialResults(partialResults: Bundle?) = Unit
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
                 override fun onError(error: Int) {
+                    // A provider can deliver a queued callback after cancel(); ignore old sessions.
+                    if (sessionId != voiceSessionId || !listening) return
                     listening = false
                     updateVoiceKey("Voice")
                     Toast.makeText(this@AirHandInputMethodService, "Voice typing stopped. Please try again.", Toast.LENGTH_SHORT).show()
                     disposeRecognizer()
                 }
                 override fun onResults(results: Bundle?) {
+                    // Never let a late result insert text after this keyboard session has ended.
+                    if (sessionId != voiceSessionId || !listening) return
                     val transcript = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                    if (!transcript.isNullOrBlank()) currentInputConnection?.commitText(transcript.trim() + " ", 1)
+                    if (!transcript.isNullOrBlank()) targetConnection.commitText(transcript.trim() + " ", 1)
                     listening = false
                     updateVoiceKey("Voice")
                     disposeRecognizer()
@@ -194,6 +209,7 @@ class AirHandInputMethodService : InputMethodService() {
             updateVoiceKey("Listening…")
             recognizer.startListening(intent)
         } catch (_: Exception) {
+            voiceSessionId += 1L
             listening = false
             updateVoiceKey("Voice")
             Toast.makeText(this, "Could not start voice typing.", Toast.LENGTH_SHORT).show()
@@ -202,6 +218,8 @@ class AirHandInputMethodService : InputMethodService() {
     }
 
     private fun stopVoiceRecognition() {
+        // Invalidate before cancelling: cancel() may still race with a queued result callback.
+        voiceSessionId += 1L
         try { if (listening) speechRecognizer?.cancel() } catch (_: Exception) { }
         listening = false
         updateVoiceKey("Voice")
