@@ -21,6 +21,9 @@ test("the browser loads one deferred classic script and bundles local helpers", 
 
 test("camera preview follows the source aspect ratio to prevent cropped fingers", () => {
   assert.ok(app.includes("function fitCameraFrameToVideo()"));
+  assert.ok(app.includes("function getHandFrameGuidance(landmarks)"));
+  assert.ok(app.includes("Hand near frame edge"));
+  assert.ok(app.includes("Hand too close"));
   assert.ok(app.includes('cameraStage.style.aspectRatio = video.videoWidth + " / " + video.videoHeight'));
   assert.ok(html.includes("object-fit:contain"));
   assert.ok(html.includes(".stage.portrait-feed{max-width:420px;margin-inline:auto;max-height:none}"));
