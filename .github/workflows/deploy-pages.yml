@@ -41,7 +41,7 @@ jobs:
           test -s pwa.js
           test -s airhand-icon.svg
           grep -Eq 'app\.js\?v=[^"]+' index.html
-          grep -Eq 'pwa\\.js\\?v=[^"]+' index.html
+          grep -Eq 'pwa\.js\?v=[^"]+' index.html
           grep -q 'rel="manifest" href="./manifest.webmanifest"' index.html
           echo "Required site files, PWA assets and versioned script references are present."
 
