@@ -18,7 +18,7 @@ class OpenPalmGestureControllerTest {
         val controller = OpenPalmGestureController()
         assertNull(controller.update(true, 0.75f, 0.50f, 1_000L))
         assertEquals(OpenPalmAction.SWIPE_LEFT, controller.update(true, 0.55f, 0.52f, 1_100L))
-        assertEquals(OpenPalmAction.SWIPE_RIGHT, controller.update(true, 0.80f, 0.51f, 1_900L))
+        assertEquals(OpenPalmAction.SWIPE_RIGHT, controller.update(true, 0.90f, 0.51f, 1_900L))
     }
 
     @Test
