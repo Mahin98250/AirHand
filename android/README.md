@@ -4,45 +4,52 @@ This directory is the native Android app track. The existing browser app remains
 
 ## Implemented foundation
 
-- Native Kotlin app module, Gradle configuration, and dark dashboard.
-- CameraX front-camera preview, started only by an explicit user tap after camera permission is granted.
-- Camera lifecycle cleanup: the preview is unbound when the Activity pauses or is destroyed; an in-app stop button is also provided.
-- Voice-recognition intent with visible transcript feedback. Recognized text is not automatically sent to a messaging app.
-- Explicit links to Android Accessibility and overlay settings.
-- Accessibility service with a narrow, guarded set of possible navigation actions (Back, Home, notifications, and vertical swipes).
-- Central safety gate requires control to be enabled, confidence >= 0.80, and a fresh detection timestamp (<= 250 ms).
-- Emergency stop disables the gesture-dispatch gate and stops the preview.
+- Native Kotlin Android app, Gradle configuration, and a dark dashboard.
+- CameraX front-camera preview, started only after an explicit user action and camera permission.
+- On-device MediaPipe Hand Landmarker live-stream inference over CameraX RGBA frames.
+- The hand model is downloaded from the pinned official MediaPipe model URL during the build, checked against a SHA-256 digest and expected byte count, and packaged into the APK. It is not downloaded by the app at runtime.
+- Frames are copied out of CameraX buffers before analysis, and the analyzer allows one inference frame in flight to bound memory pressure.
+- Port of AirHand's basic normalized 21-landmark geometry thresholds and 115 ms gesture stabilization to Kotlin. It currently displays gesture labels; it does not perform system actions.
+- Camera/inference cleanup when the Activity pauses or is destroyed; explicit stop button; emergency stop disables the gesture-dispatch gate.
+- Voice recognition intent displays a transcript for review; recognized text is not automatically sent to a messaging app.
+- Explicit Android Settings links for Accessibility and overlay permission.
+- Accessibility service has a narrow navigation-action foundation (Back, Home, notifications, vertical swipes) guarded by a disabled-by-default safety gate.
 
 ## Important capability boundary
 
-This is **not yet a working hands-free gesture controller**. The live camera is only a preview; it is not yet analyzed by an on-device hand-landmark model. The app does not yet map hand movement into a floating cursor, taps, scrolls, or text input. The current voice path uses Android's speech-recognition intent and displays recognized text; it does not inject it into other apps.
+This is **not yet a complete hands-free controller**. Current milestone is live hand landmark detection and geometric gesture display only. It does not yet map the moving hand to a floating cursor or inject gestures into arbitrary app controls. The Accessibility gate remains disabled, and no cross-app action is automatically triggered from a detected pose. A dedicated gesture keyboard/IME and actual voice text insertion into target fields are also not implemented yet.
 
-Do not enable the Accessibility service expecting gestures to work yet. The next implementation milestone is a model-backed CameraX image analyzer and a tested adapter for the existing browser gesture-engine.js geometry/stabilization primitives.
+## Build the debug APK
 
-## Build and artifact
+The GitHub Actions workflow at .github/workflows/android-apk.yml:
 
-The GitHub Actions workflow at .github/workflows/android-apk.yml builds a **debug APK** on Android project changes and uploads it as the AirHand-Mobile-debug-APK artifact.
+1. Downloads the pinned model via android/download-hand-model.sh.
+2. Verifies the model SHA-256 digest and exact byte count.
+3. Builds the Android debug APK.
+4. Checks that the generated APK contains the verified model asset.
+5. Uploads the APK as the AirHand-Mobile-debug-APK artifact.
 
-1. Open the repository's Actions tab.
-2. Select **Build AirHand Mobile APK** and open the newest run.
-3. Wait for a successful run, then download AirHand-Mobile-debug-APK.
-4. Extract the ZIP and install app-debug.apk after reviewing Android's installation warning.
+Open the repository's Actions tab, select **Build AirHand Mobile APK**, open the newest completed successful run, and download its artifact. Extract the ZIP to obtain app-debug.apk. Only a successful run with the APK artifact counts as a build. Debug APKs are for testing, not Play Store distribution; a signed release APK needs separate signing and release setup.
 
-Adding the workflow does not itself prove that a build completed. An APK is considered available only after GitHub Actions succeeds and publishes the artifact. Debug APKs are for testing, not Play Store distribution. A signed release APK still requires a deliberate signing/release setup.
+To prepare the model asset for a local Android Studio build, run:
+
+    bash android/download-hand-model.sh
+
+This downloads a roughly 7.8 MB model and verifies its checksum. The generated file is ignored by Git so binaries are not accidentally committed.
 
 ## Permission and privacy model
 
-- Camera permission is requested at runtime only after a user action. The preview is stopped when the app leaves the foreground.
-- The current manifest does not request microphone permission; voice entry delegates to Android's speech-recognition app/intent, which may have its own permission and network behavior.
-- Accessibility and overlay capabilities require the user to navigate to the corresponding Android Settings pages.
-- No camera frames are uploaded by the preview screen. This should be re-evaluated explicitly if a future inference provider or service requires network access.
-- Secure windows, permission dialogs, banking/payment surfaces, and restricted apps may prevent automation.
-- Keep a manual stop route. Do not automate emergency calls, payments, passwords, or other safety-critical actions.
+- Camera permission is requested at runtime after a user action. Camera inference stops when the app leaves the foreground.
+- Current manifest does not request microphone permission; voice input delegates to Android's speech-recognition intent, which may use the device's selected recognition provider and network.
+- The hand-landmark model runs locally. Camera frames are processed on-device and are not uploaded by AirHand.
+- MediaPipe may collect SDK usage/performance metrics according to its privacy notice; see https://goo.gle/mediapipe-privacy.
+- Accessibility and overlay capabilities require user action in Android Settings. Secure windows, permission dialogs, banking/payment surfaces, and restricted apps may block automation.
+- Keep a manual stop path. Do not automate emergency calls, payments, passwords, or other safety-critical actions.
 
 ## Next milestones
 
-1. On-device hand landmark inference over CameraX frames, with tracking-loss handling and explicit frame cleanup.
-2. Gesture confidence/stability mapping that reuses and tests the existing AirHand gesture logic.
-3. A floating cursor with safe pinch-to-click and bounded navigation/scroll actions.
-4. Dedicated AirHand gesture keyboard (InputMethodService) plus opt-in voice insertion.
-5. Device tests for latency, false clicks, battery/thermal use, interruptions, and accessible stop controls; then signed release build.
+1. Visual hand skeleton overlay and cursor calibration on the preview, including mirror/rotation alignment.
+2. Safe floating cursor with deliberate pinch-to-click, dwell and tracking-loss release.
+3. Connect only specific, tested navigation commands to the disabled-by-default Accessibility service.
+4. Dedicated AirHand gesture keyboard (InputMethodService) and opt-in voice typing into focused fields.
+5. Device testing for latency, false clicks, battery/thermal load, interruption recovery, accessibility stop controls, and then a signed release APK.
