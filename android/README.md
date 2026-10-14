@@ -34,7 +34,7 @@ The GitHub Actions workflow at .github/workflows/android-apk.yml:
 
 Open the **[AirHand Android build page](https://github.com/Mahin98250/AirHand/actions/runs/38615582949)** and sign in to GitHub if prompted. Confirm the run says **Success**, scroll to **Artifacts**, and tap **AirHand-Mobile-debug-APK** to download its ZIP. Open the ZIP in My Files or another file manager, extract it, then install **app-debug.apk**. The raw `api.github.com/.../zip` artifact address is not a public direct-download URL; opening it without an authenticated GitHub session can show `Requires authentication` (401). Use the Actions run page and its Artifacts section instead.
 
-The current tested artifact was built from commit `0b121a364ac4ed706a62be7fbac91f14828cb177`. Workflow artifacts expire after 14 days, so if the download is no longer available, open the latest successful **Build AirHand Mobile APK** run from the [Actions page](https://github.com/Mahin98250/AirHand/actions/workflows/android-apk.yml).
+Workflow artifacts expire after 14 days. For the newest tested build, open the latest successful **Build AirHand Mobile APK** run from the [Actions page](https://github.com/Mahin98250/AirHand/actions/workflows/android-apk.yml), confirm it says **Success**, then download **AirHand-Mobile-debug-APK** under Artifacts. Do not use a raw `api.github.com/.../zip` link; GitHub may return HTTP 401 unless the request is authenticated.
 
 For the step-by-step phone setup, permissions, gesture reference, safety notes and troubleshooting, see the **[AirHand Android User Guide](../android-guide.html)**. Debug APKs are for testing, not Play Store distribution; signed release builds require a dedicated signing/release setup.
 
