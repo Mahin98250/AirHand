@@ -27,9 +27,12 @@ Camera access requires HTTPS or localhost. MediaPipe's JavaScript/WASM runtime a
 - **Android / desktop Chromium:** open the GitHub Pages site over HTTPS and choose **Install app** when the button appears. You can also use the browser menu's install option.
 - **iPhone / iPad:** open the site in Safari, tap **Share**, then **Add to Home Screen**.
 - The service worker caches the HTML, local JavaScript, manifest and icon. It does not cache camera frames or third-party model files.
-- The app remains a browser-based gesture playground. Installing the PWA does not grant Android system-wide cursor control or replace the separate native AirHand Mobile APK.
+- The PWA is the browser-based gesture playground and can control only its own page. For tapping, scrolling feeds, Home/Back and app switching across Android apps, use the native **AirHand Mobile APK** and explicitly enable its Accessibility service and other required permissions. A PWA cannot inject system-wide touches.
+- On desktop or other mobile platforms, system-wide control would require a separate platform-specific companion app or OS accessibility integration; browser-only mode stays inside the page.
 
 ## Gesture controls
+
+These browser gestures operate only inside the AirHand page. They do not control other apps or the operating system.
 
 | Gesture | Action |
 | --- | --- |
