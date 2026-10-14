@@ -69,7 +69,16 @@ export function detectGesture(landmarks, previousPinch = false, modelCategory = 
     Open_Palm: "OpenPalm",
     Closed_Fist: "Fist"
   };
-  if (modelMapping[modelCategory] && modelScore >= 0.52) {
+  // Higher thresholds for poses that would switch modes or pause the game.
+  const confidenceThresholds = {
+    Pointing_Up: 0.58,
+    Victory: 0.70,
+    Thumb_Up: 0.66,
+    Open_Palm: 0.58,
+    Closed_Fist: 0.62
+  };
+  const requiredConfidence = confidenceThresholds[modelCategory] ?? 1;
+  if (modelMapping[modelCategory] && modelScore >= requiredConfidence) {
     return {
       gesture: modelMapping[modelCategory], fingers, pinchRatio, palmScale,
       thumbExtended, source: "model", confidence: modelScore
