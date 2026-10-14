@@ -69,6 +69,8 @@ class AirHandAccessibilityService : AccessibilityService() {
             NavigationAction.NOTIFICATIONS -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
             NavigationAction.SCROLL_DOWN -> dispatchSwipe(0.5f, 0.72f, 0.5f, 0.28f)
             NavigationAction.SCROLL_UP -> dispatchSwipe(0.5f, 0.28f, 0.5f, 0.72f)
+            NavigationAction.SWIPE_LEFT -> dispatchSwipe(0.78f, 0.5f, 0.22f, 0.5f)
+            NavigationAction.SWIPE_RIGHT -> dispatchSwipe(0.22f, 0.5f, 0.78f, 0.5f)
         }
     }
 
@@ -83,7 +85,7 @@ class AirHandAccessibilityService : AccessibilityService() {
         return dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
     }
 
-    enum class NavigationAction { BACK, HOME, RECENTS, NOTIFICATIONS, SCROLL_UP, SCROLL_DOWN }
+    enum class NavigationAction { BACK, HOME, RECENTS, NOTIFICATIONS, SCROLL_UP, SCROLL_DOWN, SWIPE_LEFT, SWIPE_RIGHT }
 
     companion object {
         private const val LONG_PRESS_STROKE_MS = 700L
