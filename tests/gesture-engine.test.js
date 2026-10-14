@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { angleDegrees, clamp, CursorSmoother, detectGesture, distance2D, GestureStabilizer } from "../gesture-engine.js";
+import { angleDegrees, clamp, CursorSmoother, detectGesture, distance2D, GestureStabilizer, SteeringController } from "../gesture-engine.js";
 
 function baseHand() {
   const points = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5 }));
@@ -107,4 +107,31 @@ test("the engine exposes explicit short tracking grace policy in the live app", 
   assert.ok(source.includes("const TRACKING_LOSS_GRACE_MS = 180"));
   assert.ok(source.includes("Reacquiring hand"));
   assert.ok(source.includes("lastHandLandmarks"));
+});
+
+
+test("two-hand steering calibrates neutral and maps wrist rotation with smoothing", () => {
+  const hand = (x, y) => { const points = Array.from({ length: 21 }, () => ({ x, y })); points[0] = { x, y }; return points; };
+  const steering = new SteeringController({ smoothing: 1, maxTurnRadians: 0.8 });
+  const left = hand(0.25, 0.5), right = hand(0.75, 0.5);
+  assert.equal(steering.calibrate(left, right), true);
+  assert.equal(steering.update(left, right, 10).value, 0);
+  const turnedRight = hand(0.75, 0.25);
+  const result = steering.update(left, turnedRight, 20);
+  assert.ok(Math.abs(result.value) > 0.4 && Math.abs(result.value) <= 1);
+  assert.equal(result.detected, true);
+  assert.ok(result.confidence > 0);
+});
+
+test("two-hand steering rejects hands too close and safely recenters when tracking is lost", () => {
+  const hand = (x, y) => { const points = Array.from({ length: 21 }, () => ({ x, y })); points[0] = { x, y }; return points; };
+  const steering = new SteeringController({ smoothing: 1 });
+  assert.equal(steering.calibrate(hand(0.45, 0.5), hand(0.52, 0.5)), false);
+  const left = hand(0.25, 0.5), right = hand(0.75, 0.5);
+  steering.calibrate(left, right);
+  steering.update(left, hand(0.75, 0.25));
+  const lost = steering.update(null, null);
+  assert.equal(lost.detected, false);
+  assert.ok(Math.abs(lost.value) < 1);
+  assert.equal(lost.confidence, 0);
 });
