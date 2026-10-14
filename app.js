@@ -287,6 +287,14 @@ async function startCamera() {
     });
     video.srcObject = mediaStream;
     await video.play();
+    fitCameraFrameToVideo();
+    if (!video.videoWidth) {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Camera started but did not provide video dimensions. Try switching cameras or reloading.")), 8000);
+        video.addEventListener("loadedmetadata", () => { clearTimeout(timeout); resolve(); }, { once: true });
+      });
+      fitCameraFrameToVideo();
+    }
 
     // Load MediaPipe only after the UI has already initialized and the user starts the camera.
     // A CDN outage must not prevent navigation and non-camera controls from working.
@@ -363,6 +371,8 @@ async function startCamera() {
     if (gestureRecognizer) { gestureRecognizer.close(); gestureRecognizer = null; }
     geometryOnlyFallback = false;
     video.srcObject = null;
+    cameraStage.style.aspectRatio = "";
+    cameraStage.classList.remove("portrait-feed");
     updateCameraUI(false);
     setReady("Camera couldn't start", error?.message || "Check camera permission, then try again.");
     showToast(error?.message || "Unable to start the camera.");
@@ -393,6 +403,13 @@ function stopCamera() {
   stablePinch = false;
   $("gesture").textContent = "Waiting for hand";
   updateCameraUI(false);
+}
+function fitCameraFrameToVideo() {
+  if (!video.videoWidth || !video.videoHeight) return;
+  // Match the preview container to the actual camera aspect ratio so no fingers are cropped.
+  cameraStage.style.aspectRatio = video.videoWidth + " / " + video.videoHeight;
+  cameraStage.classList.toggle("portrait-feed", video.videoHeight > video.videoWidth);
+  resizeCanvases();
 }
 function resizeCanvases() {
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -759,6 +776,7 @@ window.addEventListener("keydown", event => {
   if (event.key === "2") switchMode("game");
 });
 window.addEventListener("resize", resizeCanvases);
+video.addEventListener("loadedmetadata", fitCameraFrameToVideo);
 window.addEventListener("pagehide", () => {
   pageIsClosing = true;
   cancelAnimationFrame(gameFrameRequest);
