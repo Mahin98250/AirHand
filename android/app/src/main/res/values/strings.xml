@@ -2,4 +2,5 @@
     <string name="app_name">AirHand Mobile</string>
     <string name="accessibility_service_name">AirHand Gesture Actions</string>
     <string name="accessibility_service_description">Allows AirHand to perform user-requested navigation gestures such as scroll, back, and home while gesture control is enabled.</string>
+    <string name="input_method_name">AirHand Gesture Keyboard</string>
 </resources>
