@@ -9,13 +9,13 @@ object GestureCommandRouter {
     @Volatile var lastDetectionAtMs: Long = 0L
 
     fun mayDispatch(nowMs: Long = System.currentTimeMillis(), confidence: Float): Boolean {
-        return enabled && confidence >= 0.80f && lastDetectionAtMs > 0L &&
+        return enabled && confidence.isFinite() && confidence in 0.80f..1.0f && lastDetectionAtMs > 0L &&
             nowMs >= lastDetectionAtMs && nowMs - lastDetectionAtMs <= 250L
     }
 
     /** Navigation has a lower confidence floor than click because the gesture engine uses geometric poses. */
     fun mayDispatchNavigation(nowMs: Long = System.currentTimeMillis(), confidence: Float): Boolean {
-        return enabled && confidence >= 0.62f && lastDetectionAtMs > 0L &&
+        return enabled && confidence.isFinite() && confidence in 0.62f..1.0f && lastDetectionAtMs > 0L &&
             nowMs >= lastDetectionAtMs && nowMs - lastDetectionAtMs <= 250L
     }
 
