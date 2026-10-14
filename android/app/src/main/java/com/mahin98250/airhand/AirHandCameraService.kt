@@ -45,9 +45,12 @@ class AirHandCameraService : LifecycleService() {
     private var lastTapAtMs = 0L
     private var openPalmWristY: Float? = null
     private var lastScrollAtMs = 0L
-    private var peaceStartedAtMs = 0L
-    private var backTriggeredForPeace = false
+    private val backHoldGate = GestureHoldGate()
+    private val homeHoldGate = GestureHoldGate()
+    private val recentsHoldGate = GestureHoldGate()
     private var lastBackAtMs = 0L
+    private var lastHomeAtMs = 0L
+    private var lastRecentsAtMs = 0L
     @Volatile private var shuttingDown = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -165,27 +168,53 @@ class AirHandCameraService : LifecycleService() {
                             openPalmWristY = null
                         }
 
-                        // Peace sign is a deliberate long-hold Back gesture, one action per pose.
-                        if (reading.stable && reading.gesture == "Peace" &&
-                            GestureCommandRouter.mayDispatchNavigation(confidence = reading.confidence)) {
-                            val now = System.currentTimeMillis()
-                            if (peaceStartedAtMs == 0L) peaceStartedAtMs = now
-                            if (!backTriggeredForPeace && now - peaceStartedAtMs >= BACK_HOLD_MS &&
-                                now - lastBackAtMs >= BACK_COOLDOWN_MS) {
-                                // Accessibility actions are dispatched on the main thread.
-                                // Latch before posting so one held pose cannot queue repeated Back actions.
-                                backTriggeredForPeace = true
-                                lastBackAtMs = now
-                                val confidence = reading.confidence
-                                mainHandler.post {
-                                    AirHandAccessibilityService.instance?.performNavigation(
-                                        AirHandAccessibilityService.NavigationAction.BACK, confidence
-                                    )
-                                }
+                        // Long-hold navigation is one-shot. A pose must be released and re-formed
+                        // before it can trigger again, even if the user holds it in view.
+                        val navigationReady = reading.stable &&
+                            GestureCommandRouter.mayDispatchNavigation(confidence = reading.confidence)
+                        val nowForNavigation = System.currentTimeMillis()
+                        val backDue = backHoldGate.update(
+                            if (navigationReady && reading.gesture == "Peace") "Peace" else null,
+                            nowForNavigation,
+                            BACK_HOLD_MS
+                        )
+                        val homeDue = homeHoldGate.update(
+                            if (navigationReady && reading.gesture == "ThumbsUp") "ThumbsUp" else null,
+                            nowForNavigation,
+                            HOME_HOLD_MS
+                        )
+                        val recentsDue = recentsHoldGate.update(
+                            if (navigationReady && reading.gesture == "Fist") "Fist" else null,
+                            nowForNavigation,
+                            RECENTS_HOLD_MS
+                        )
+
+                        if (backDue && nowForNavigation - lastBackAtMs >= BACK_COOLDOWN_MS) {
+                            lastBackAtMs = nowForNavigation
+                            val confidence = reading.confidence
+                            mainHandler.post {
+                                AirHandAccessibilityService.instance?.performNavigation(
+                                    AirHandAccessibilityService.NavigationAction.BACK, confidence
+                                )
                             }
-                        } else {
-                            peaceStartedAtMs = 0L
-                            backTriggeredForPeace = false
+                        }
+                        if (homeDue && nowForNavigation - lastHomeAtMs >= HOME_COOLDOWN_MS) {
+                            lastHomeAtMs = nowForNavigation
+                            val confidence = reading.confidence
+                            mainHandler.post {
+                                AirHandAccessibilityService.instance?.performNavigation(
+                                    AirHandAccessibilityService.NavigationAction.HOME, confidence
+                                )
+                            }
+                        }
+                        if (recentsDue && nowForNavigation - lastRecentsAtMs >= RECENTS_COOLDOWN_MS) {
+                            lastRecentsAtMs = nowForNavigation
+                            val confidence = reading.confidence
+                            mainHandler.post {
+                                AirHandAccessibilityService.instance?.performNavigation(
+                                    AirHandAccessibilityService.NavigationAction.RECENTS, confidence
+                                )
+                            }
                         }
 
                         lastStableGesture = reading.gesture
@@ -222,8 +251,9 @@ class AirHandCameraService : LifecycleService() {
 
     private fun resetNavigationGestureState() {
         openPalmWristY = null
-        peaceStartedAtMs = 0L
-        backTriggeredForPeace = false
+        backHoldGate.reset()
+        homeHoldGate.reset()
+        recentsHoldGate.reset()
     }
 
     private fun installCursorOverlay() {
@@ -266,7 +296,7 @@ class AirHandCameraService : LifecycleService() {
     private fun buildNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_menu_view)
         .setContentTitle("AirHand gesture control is on")
-        .setContentText("Hand tracking runs on this device. Tap Stop to disable it.")
+        .setContentText("Pinch: tap • open hand: scroll • peace: Back • thumb: Home • fist: recent apps. Tap Stop to end control.")
         .setOngoing(true)
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
         .addAction(android.R.drawable.ic_media_pause, "Stop", stopPendingIntent())
@@ -375,8 +405,12 @@ class AirHandCameraService : LifecycleService() {
         private const val CLICK_COOLDOWN_MS = 450L
         private const val SCROLL_THRESHOLD = 0.13f
         private const val SCROLL_COOLDOWN_MS = 650L
-        private const val BACK_HOLD_MS = 900L
+        private const val BACK_HOLD_MS = 1_000L
         private const val BACK_COOLDOWN_MS = 1_200L
+        private const val HOME_HOLD_MS = 1_350L
+        private const val HOME_COOLDOWN_MS = 1_800L
+        private const val RECENTS_HOLD_MS = 1_500L
+        private const val RECENTS_COOLDOWN_MS = 1_800L
         @Volatile var isRunning: Boolean = false
             private set
     }
