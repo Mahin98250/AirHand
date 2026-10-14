@@ -18,7 +18,7 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the browser loads one deferred classic script and bundles local helpers", () => {
-  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-23"></script>'));
+  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-24"></script>'));
   assert.ok(app.includes("function detectGesture("));
   assert.ok(app.includes("function reportAirHandRuntimeError("));
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
@@ -199,4 +199,12 @@ test("Air Drive touch controls are present, accessible, and release steering or 
   assert.ok(app.includes('bindDriveHold("driveRight"'));
   assert.ok(app.includes('bindDriveHold("driveBrake"'));
   assert.ok(app.includes('button.addEventListener("pointercancel", release)'));
+});
+
+
+test("Air Drive receives the corrected steering direction and polished HUD styling", () => {
+  assert.ok(app.includes("const target = clamp(-corrected / this.maxTurnRadians, -1, 1)"));
+  assert.ok(html.includes("app.js?v=airhand-20261014-24"));
+  assert.ok(html.includes(".drive-hud b{font-variant-numeric:tabular-nums"));
+  assert.ok(html.includes("prefers-reduced-motion:reduce"));
 });
