@@ -512,7 +512,7 @@ function trackFrame(now) {
     $("gesture").textContent = labels[stable] || labels.Unclear;
     updateCursor(landmarks[8]);
     if (stable !== lastStableGesture) {
-      if (!wasCalibrating) handleStableGesture(stable, lastStableGesture, now, landmarks);
+      if (!wasCalibrating) handleStableGesture(stable, lastStableGesture, now, landmarks, raw.source);
       lastStableGesture = stable;
     }
   } else {
@@ -630,8 +630,9 @@ function updateCursor(indexTip) {
     if (target) target.classList.add("hovered");
   }
 }
-function handleStableGesture(gesture, previous, now) {
-  if (gesture === "Peace" && previous !== "Peace" && now - lastPeaceSwitch > 950) {
+function handleStableGesture(gesture, previous, now, landmarks = null, source = null) {
+  const reliableDiscreteGesture = geometryOnlyFallback || source === "model";
+  if (reliableDiscreteGesture && gesture === "Peace" && previous !== "Peace" && now - lastPeaceSwitch > 950) {
     lastPeaceSwitch = now;
     switchMode(currentMode === "cursor" ? "game" : "cursor");
     showToast(currentMode === "game" ? "Hand Runner selected" : "Air Cursor selected");
@@ -645,9 +646,9 @@ function handleStableGesture(gesture, previous, now) {
   }
 
   if (currentMode === "game") {
-    if (gesture === "OpenPalm" && !game.playing) startGame();
-    else if (gesture === "OpenPalm" && game.paused) resumeGame();
-    if (gesture === "ThumbsUp" && previous !== "ThumbsUp" &&
+    if (reliableDiscreteGesture && gesture === "OpenPalm" && !game.playing) startGame();
+    else if (reliableDiscreteGesture && gesture === "OpenPalm" && game.paused) resumeGame();
+    if (reliableDiscreteGesture && gesture === "ThumbsUp" && previous !== "ThumbsUp" &&
       now - lastThumbToggle > 900 && game.playing) {
       lastThumbToggle = now;
       if (game.paused) resumeGame();
