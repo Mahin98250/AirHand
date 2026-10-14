@@ -2,6 +2,7 @@ package com.mahin98250.airhand
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.PointF
 import android.os.SystemClock
@@ -15,8 +16,8 @@ import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Converts CameraX RGBA frames into MediaPipe input and runs an on-device Hand Landmarker.
- * At most one frame is in flight so bitmap/image memory remains bounded on slower phones.
+ * CameraX RGBA -> upright/mirrored bitmap -> on-device MediaPipe Hand Landmarker.
+ * Frame buffers are closed immediately after copying, and one inference frame is allowed in flight.
  */
 class HandLandmarkerAnalyzer(
     context: Context,
@@ -33,11 +34,7 @@ class HandLandmarkerAnalyzer(
 
     init {
         val options = HandLandmarker.HandLandmarkerOptions.builder()
-            .setBaseOptions(
-                BaseOptions.builder()
-                    .setModelAssetPath(MODEL_ASSET)
-                    .build()
-            )
+            .setBaseOptions(BaseOptions.builder().setModelAssetPath(MODEL_ASSET).build())
             .setRunningMode(RunningMode.LIVE_STREAM)
             .setNumHands(1)
             .setMinHandDetectionConfidence(0.55f)
@@ -47,7 +44,8 @@ class HandLandmarkerAnalyzer(
                 try {
                     val hand = result.landmarks().firstOrNull()
                     val points = hand?.map { PointF(it.x(), it.y()) } ?: emptyList()
-                    onFrame(points, (SystemClock.uptimeMillis() - result.timestampMs()).coerceAtLeast(0L))
+                    val latency = (SystemClock.uptimeMillis() - result.timestampMs()).coerceAtLeast(0L)
+                    onFrame(points, latency)
                 } catch (error: Exception) {
                     onError("Hand-result processing failed: ${error.javaClass.simpleName}")
                 } finally {
@@ -68,53 +66,84 @@ class HandLandmarkerAnalyzer(
             return
         }
 
-        val width = imageProxy.width
-        val height = imageProxy.height
-        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-        val frameTime = SystemClock.uptimeMillis()
         val rawBitmap = try {
-            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
-                val buffer = imageProxy.planes.first().buffer
-                buffer.rewind()
-                bitmap.copyPixelsFromBuffer(buffer)
-            }
+            copyRgbaPlane(imageProxy)
         } catch (error: Exception) {
             inFlight.set(false)
             onError("Could not prepare a camera frame: ${error.javaClass.simpleName}")
-            imageProxy.close()
-            return
+            null
         } finally {
-            // The MediaPipe input is built from our copied bitmap, never from a live CameraX buffer.
+            // Never hold CameraX's buffer while MediaPipe is running.
             imageProxy.close()
-        }
+        } ?: return
 
-        var rotatedBitmap: Bitmap? = null
+        var uprightBitmap: Bitmap? = null
+        var mirroredBitmap: Bitmap? = null
         var mpImage: MPImage? = null
         try {
-            val transform = Matrix().apply {
-                if (rotationDegrees != 0) postRotate(rotationDegrees.toFloat())
-                // Match the mirrored front-camera preview for cursor/landmark coordinates.
-                postScale(-1f, 1f, width / 2f, height / 2f)
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+            uprightBitmap = if (rotationDegrees == 0) rawBitmap else {
+                val rotation = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+                Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, rotation, true)
+                    .also { if (it !== rawBitmap) rawBitmap.recycle() }
             }
-            rotatedBitmap = Bitmap.createBitmap(rawBitmap, 0, 0, width, height, transform, true)
-            if (rotatedBitmap !== rawBitmap) rawBitmap.recycle()
-            mpImage = BitmapImageBuilder(rotatedBitmap).build()
+
+            // Mirroring is applied after rotation so portrait and landscape cameras align consistently.
+            val mirror = Matrix().apply {
+                postScale(-1f, 1f, uprightBitmap.width / 2f, uprightBitmap.height / 2f)
+            }
+            mirroredBitmap = Bitmap.createBitmap(
+                uprightBitmap, 0, 0, uprightBitmap.width, uprightBitmap.height, mirror, true
+            )
+            if (mirroredBitmap !== uprightBitmap) uprightBitmap.recycle()
+
+            mpImage = BitmapImageBuilder(mirroredBitmap).build()
             synchronized(lock) {
                 if (closed) {
                     mpImage.close()
-                    rotatedBitmap.recycle()
+                    mirroredBitmap.recycle()
                     inFlight.set(false)
                     return
                 }
                 pendingImage = mpImage
-                pendingBitmap = rotatedBitmap
+                pendingBitmap = mirroredBitmap
             }
-            landmarker.detectAsync(mpImage, frameTime)
+            landmarker.detectAsync(mpImage, SystemClock.uptimeMillis())
         } catch (error: Exception) {
-            if (rotatedBitmap == null && !rawBitmap.isRecycled) rawBitmap.recycle()
+            if (mirroredBitmap == null) {
+                uprightBitmap?.takeUnless { it.isRecycled }?.recycle()
+                if (uprightBitmap == null) rawBitmap.takeUnless { it.isRecycled }?.recycle()
+            }
             releasePending(mpImage)
             onError("Hand tracking could not process a frame: ${error.javaClass.simpleName}")
         }
+    }
+
+    private fun copyRgbaPlane(image: ImageProxy): Bitmap {
+        val plane = image.planes.firstOrNull()
+            ?: throw IllegalArgumentException("Camera frame has no image plane.")
+        val buffer = plane.buffer.duplicate()
+        val rowStride = plane.rowStride
+        val pixelStride = plane.pixelStride
+        require(pixelStride >= 4 && rowStride >= image.width * pixelStride) {
+            "Unexpected RGBA frame stride: row=$rowStride, pixel=$pixelStride"
+        }
+        val pixels = IntArray(image.width * image.height)
+        val bytes = ByteArray(buffer.remaining())
+        buffer.get(bytes)
+        for (y in 0 until image.height) {
+            val rowBase = y * rowStride
+            for (x in 0 until image.width) {
+                val offset = rowBase + x * pixelStride
+                if (offset + 3 >= bytes.size) throw IllegalArgumentException("Camera RGBA plane is truncated.")
+                val red = bytes[offset].toInt() and 0xFF
+                val green = bytes[offset + 1].toInt() and 0xFF
+                val blue = bytes[offset + 2].toInt() and 0xFF
+                val alpha = bytes[offset + 3].toInt() and 0xFF
+                pixels[y * image.width + x] = Color.argb(alpha, red, green, blue)
+            }
+        }
+        return Bitmap.createBitmap(pixels, image.width, image.height, Bitmap.Config.ARGB_8888)
     }
 
     private fun releasePending(expected: MPImage? = null) {
