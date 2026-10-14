@@ -24,6 +24,8 @@ test("camera preview follows the source aspect ratio to prevent cropped fingers"
   assert.ok(app.includes("function getHandFrameGuidance(landmarks)"));
   assert.ok(app.includes("function startCursorCalibration()"));
   assert.ok(app.includes("function collectCalibrationSample(indexTip, now)"));
+  assert.ok(app.includes("Calibration waiting for hand"));
+  assert.ok(app.includes("Calibration stopped because no hand was detected."));
   assert.ok(app.includes("localStorage.setItem(\"airhand-cursor-calibration\""));
   assert.ok(app.includes("function cycleDifficulty()"));
   assert.ok(app.includes("const reliableDiscreteGesture = geometryOnlyFallback || source === \"model\";"));
