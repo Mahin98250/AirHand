@@ -47,6 +47,7 @@ class AirHandCameraService : LifecycleService() {
     private var lastLongPressAtMs = 0L
     private val pinchInteraction = PinchInteractionController()
     private var openPalmWristY: Float? = null
+    private var openPalmWristX: Float? = null
     private var lastScrollAtMs = 0L
     private val backHoldGate = GestureHoldGate()
     private val homeHoldGate = GestureHoldGate()
@@ -197,11 +198,27 @@ class AirHandCameraService : LifecycleService() {
                         if (reading.stable && reading.gesture == "OpenPalm" &&
                             GestureCommandRouter.mayDispatchNavigation(confidence = reading.confidence)) {
                             val wristY = landmarks[0].y
+                            val wristX = landmarks[0].x
                             val previousY = openPalmWristY
+                            val previousX = openPalmWristX
                             val now = System.currentTimeMillis()
-                            if (previousY != null && now - lastScrollAtMs >= SCROLL_COOLDOWN_MS) {
+                            if (previousY != null && previousX != null &&
+                                now - lastScrollAtMs >= SCROLL_COOLDOWN_MS) {
                                 val deltaY = wristY - previousY
-                                if (kotlin.math.abs(deltaY) >= SCROLL_THRESHOLD) {
+                                val deltaX = wristX - previousX
+                                // Pick the dominant axis so diagonal movement doesn't trigger two actions.
+                                if (kotlin.math.abs(deltaX) >= HORIZONTAL_SWIPE_THRESHOLD &&
+                                    kotlin.math.abs(deltaX) > kotlin.math.abs(deltaY)) {
+                                    val action = if (deltaX < 0f)
+                                        AirHandAccessibilityService.NavigationAction.SWIPE_LEFT
+                                    else AirHandAccessibilityService.NavigationAction.SWIPE_RIGHT
+                                    mainHandler.post {
+                                        AirHandAccessibilityService.instance?.performNavigation(action, reading.confidence)
+                                    }
+                                    lastScrollAtMs = now
+                                    openPalmWristX = wristX
+                                    openPalmWristY = wristY
+                                } else if (kotlin.math.abs(deltaY) >= SCROLL_THRESHOLD) {
                                     val action = if (deltaY < 0f)
                                         AirHandAccessibilityService.NavigationAction.SCROLL_DOWN
                                     else AirHandAccessibilityService.NavigationAction.SCROLL_UP
@@ -209,13 +226,16 @@ class AirHandCameraService : LifecycleService() {
                                         AirHandAccessibilityService.instance?.performNavigation(action, reading.confidence)
                                     }
                                     lastScrollAtMs = now
+                                    openPalmWristX = wristX
                                     openPalmWristY = wristY
                                 }
-                            } else if (previousY == null) {
+                            } else if (previousY == null || previousX == null) {
                                 openPalmWristY = wristY
+                                openPalmWristX = wristX
                             }
                         } else {
                             openPalmWristY = null
+                            openPalmWristX = null
                         }
 
                         // Long-hold navigation is one-shot. A pose must be released and re-formed
@@ -301,6 +321,7 @@ class AirHandCameraService : LifecycleService() {
 
     private fun resetNavigationGestureState() {
         openPalmWristY = null
+        openPalmWristX = null
         backHoldGate.reset()
         homeHoldGate.reset()
         recentsHoldGate.reset()
@@ -483,6 +504,7 @@ class AirHandCameraService : LifecycleService() {
         private const val CLICK_COOLDOWN_MS = 450L
         private const val LONG_PRESS_COOLDOWN_MS = 900L
         private const val SCROLL_THRESHOLD = 0.13f
+        private const val HORIZONTAL_SWIPE_THRESHOLD = 0.16f
         private const val SCROLL_COOLDOWN_MS = 650L
         private const val BACK_HOLD_MS = 1_000L
         private const val BACK_COOLDOWN_MS = 1_200L
