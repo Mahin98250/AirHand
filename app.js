@@ -483,8 +483,8 @@ async function startCamera() {
     cameraStage.style.aspectRatio = "";
     cameraStage.classList.remove("portrait-feed");
     updateCameraUI(false);
-    setReady("Camera couldn't start", error?.message || "Check camera permission, then try again.");
-    showToast(error?.message || "Unable to start the camera.");
+    setReady("Camera couldn't start", describeCameraError(error));
+    showToast(describeCameraError(error));
   } finally {
     $("start").disabled = false;
     $("start2").disabled = false;
