@@ -9,7 +9,8 @@ const gameCanvas = $("game");
 const gameContext = gameCanvas.getContext("2d");
 const cameraStage = $("stage");
 
-let gestureRecognizer = null;\nlet geometryOnlyFallback = false;
+let gestureRecognizer = null;
+let geometryOnlyFallback = false;
 let mediaStream = null;
 let cameraActive = false;
 let trackingFrame = 0;
@@ -146,7 +147,12 @@ async function startCamera() {
     resizeCanvases();
     updateCameraUI(true);
     trackingFrame = requestAnimationFrame(trackFrame);
-    if (geometryOnlyFallback) {\n      setReady("Fallback tracking is live", "Gesture model unavailable; geometric detection is active.");\n      showToast("Using landmark-based gesture fallback.");\n    } else {\n      showToast("Camera ready — show your hand.");\n    }
+    if (geometryOnlyFallback) {
+      setReady("Fallback tracking is live", "Gesture model unavailable; geometric detection is active.");
+      showToast("Using landmark-based gesture fallback.");
+    } else {
+      showToast("Camera ready — show your hand.");
+    }
   } catch (error) {
     console.error("AirHand camera startup failed:", error);
     stopMediaTracks();
@@ -233,7 +239,9 @@ function trackFrame(now) {
   lastVideoTime = video.currentTime;
   let result;
   try {
-    result = geometryOnlyFallback\n      ? gestureRecognizer.detectForVideo(video, now)\n      : gestureRecognizer.recognizeForVideo(video, now);
+    result = geometryOnlyFallback
+      ? gestureRecognizer.detectForVideo(video, now)
+      : gestureRecognizer.recognizeForVideo(video, now);
   } catch (error) {
     console.warn("Skipping a frame after inference error:", error);
     return;
