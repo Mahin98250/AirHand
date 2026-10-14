@@ -1272,7 +1272,7 @@ function driveFrame(now) {
   else drive.speed = Math.min(220, drive.speed + dt * 2.8);
   drive.score += dt * drive.speed * 0.12;
   drive.roadOffset += dt * drive.speed;
-  drive.lane += (clamp(drive.steer, -0.92, 0.92) - drive.lane) * Math.min(1, dt * 4.2);
+  drive.lane += (clamp(drive.steer, -0.92, 0.92) - drive.lane) * (1 - Math.exp(-dt * 6.5));
   drive.lane = clamp(drive.lane, -0.92, 0.92);
   drive.spawnIn -= dt;
   if (drive.spawnIn <= 0) {
@@ -1297,7 +1297,7 @@ function calibrateDriveSteering() {
     $("driveGuidance").textContent = "Show both hands, spread them apart, and hold still to calibrate";
     showToast("Two visible hands are needed to calibrate steering."); return;
   }
-  drive.steer = 0; driveKeyboardSteer = null; $("driveGuidance").textContent = "Calibrated ✓ · turn both hands like a wheel; small turns now respond"; showToast("Air steering calibrated!");
+  drive.steer = 0; driveKeyboardSteer = null; $("driveGuidance").textContent = "Calibrated ✓ · turn right; HUD must say RIGHT. If not, toggle Reverse steering."; showToast("Air steering calibrated!");
 }
 let driveLatestHands = null;
 
@@ -1654,10 +1654,10 @@ $("driveInvert").addEventListener("click", () => {
   driveSteering.value = 0;
   drive.steer = 0;
   $("driveInvert").setAttribute("aria-pressed", String(driveSteering.inverted));
-  $("driveInvert").textContent = driveSteering.inverted ? "↔ Reverse steering: on" : "↔ Reverse steering: off";
+  $("driveInvert").textContent = driveSteering.inverted ? "↔ Reverse steering: ON" : "↔ Reverse steering: OFF";
   $("driveGuidance").textContent = driveSteering.inverted
-    ? "Reverse steering on · test left/right, then recalibrate"
-    : "Reverse steering off · test left/right, then recalibrate";
+    ? "Reverse steering ON · turn right and check the HUD says RIGHT"
+    : "Reverse steering OFF · turn right and check the HUD says RIGHT";
   showToast(driveSteering.inverted ? "Steering direction reversed." : "Steering direction restored.");
 });
 $("driveReset").addEventListener("click", () => { drive.playing = false; drive.braking = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Show both hands like you are holding a steering wheel, then calibrate."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); renderDrive(); });
