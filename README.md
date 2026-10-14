@@ -56,3 +56,13 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 - Automated regression tests cover smoothing response, pinch hysteresis, stability status, and the tracking grace policy.
 
 **Physical validation still required:** real cameras and hands across bright/dim lighting, different distances and hand sizes, mirrored/non-mirrored preview, fast motion, temporary occlusion, and repeated pinch press/release. Automated tests do not establish real-world accuracy, and this release is not claimed to work offline.
+
+
+## Phase 2 — Precision interaction
+
+- **Pinch-and-hold drag:** pinch over a workspace tile, move while holding the pinch, and release over another tile to reorder it. Releasing outside a tile cancels the drop.
+- **Optional dwell click:** enable the checkbox in Air Cursor settings, then hold the cursor over a tile for 850 ms to select it. Dwell is off by default and pauses while pinching or calibrating.
+- **Guided cursor calibration:** a blue target steps through the workspace's four corners during the existing five-second range-capture flow. Follow it with the cursor and move across a comfortable range; insufficient movement is rejected.
+- Cursor response remains adjustable. Runner controls remain separate from cursor drag/dwell behavior.
+
+**Still requires physical validation:** camera-based target following, drag start/release reliability, dwell timing with natural hand jitter, and calibration behavior across lighting, camera angles, and different hand sizes. Automated tests and simulated browser checks do not establish real-world accuracy. AirHand is not claimed to work fully offline.
