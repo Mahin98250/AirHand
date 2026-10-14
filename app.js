@@ -30,6 +30,7 @@ let mirrorCamera = true;
 let showLandmarks = true;
 const stabilizer = new GestureStabilizer(115);
 const cursorFilter = new CursorSmoother(cursorSensitivity);
+const SUPPORTED_MODEL_GESTURES = new Set(["Pointing_Up", "Victory", "Thumb_Up", "Open_Palm", "Closed_Fist"]);
 const labels = {
   None: "No hand detected", Unclear: "Adjust your hand", Pinch: "Pinch",
   ThumbsUp: "Thumbs-up", Peace: "Peace sign", Point: "Pointing",
@@ -253,7 +254,7 @@ function trackFrame(now) {
   if (result.landmarks?.length) {
     const landmarks = result.landmarks[0];
     drawLandmarks(landmarks, width, height);
-    const category = geometryOnlyFallback ? null : result.gestures?.[0]?.[0];
+    const category = geometryOnlyFallback ? null : selectBestModelGesture(result.gestures?.[0] || []);
     const raw = detectGesture(landmarks, stablePinch, category?.categoryName || null, category?.score || 0);
     $("gestureConfidence").textContent = raw.source === "model"
       ? "Model confidence " + Math.round((raw.confidence || 0) * 100) + "%"
@@ -283,12 +284,26 @@ function trackFrame(now) {
     fpsWindowStart = now;
   }
 }
+function selectBestModelGesture(categories) {
+  return categories
+    .filter(category => SUPPORTED_MODEL_GESTURES.has(category.categoryName))
+    .sort((a, b) => b.score - a.score)[0] || null;
+}
 function updateCursor(indexTip) {
   const targetX = mirrorCamera ? 1 - indexTip.x : indexTip.x;
   const point = cursorFilter.update(targetX, indexTip.y);
   $("cursor").style.left = (clamp(point.x, 0.01, 0.99) * 100) + "%";
   $("cursor").style.top = (clamp(point.y, 0.05, 0.95) * 100) + "%";
   $("cursor").style.opacity = currentMode === "cursor" ? "1" : ".28";
+  document.querySelectorAll(".mini").forEach(tile => tile.classList.remove("hovered"));
+  if (currentMode === "cursor") {
+    const rect = document.querySelector(".cards").getBoundingClientRect();
+    const target = document.elementFromPoint(
+      rect.left + clamp(point.x, 0.01, 0.99) * rect.width,
+      rect.top + clamp(point.y, 0.05, 0.95) * rect.height
+    )?.closest(".mini");
+    if (target) target.classList.add("hovered");
+  }
 }
 function handleStableGesture(gesture, previous, now) {
   if (gesture === "Peace" && previous !== "Peace" && now - lastPeaceSwitch > 950) {
@@ -349,7 +364,7 @@ function switchMode(mode) {
     game.playing = false;
     game.paused = false;
     showGameOverlay("Ready, set, jump.", "Show an open palm to start. Pinch to jump over obstacles.", "Play runner");
-    renderGame();
+    resizeCanvases();
   }
 }
 function roundRect(context, x, y, width, height, radius) {
@@ -541,7 +556,7 @@ window.addEventListener("pagehide", () => {
   stopCamera();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && game.playing && !game.paused) pauseGame(false);
+  if (document.hidden && game.playing && !game.paused) pauseGame(true);
 });
 updateCameraUI(false);
 resizeCanvases();
