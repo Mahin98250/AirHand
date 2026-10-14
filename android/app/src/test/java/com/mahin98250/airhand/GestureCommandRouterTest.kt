@@ -29,6 +29,17 @@ class GestureCommandRouterTest {
     }
 
     @Test
+    fun nonFiniteConfidenceNeverDispatchesAnyAction() {
+        GestureCommandRouter.enabled = true
+        GestureCommandRouter.lastDetectionAtMs = 990L
+
+        assertFalse(GestureCommandRouter.mayDispatch(nowMs = 1_000L, confidence = Float.NaN))
+        assertFalse(GestureCommandRouter.mayDispatch(nowMs = 1_000L, confidence = Float.POSITIVE_INFINITY))
+        assertFalse(GestureCommandRouter.mayDispatchNavigation(nowMs = 1_000L, confidence = Float.NaN))
+        assertFalse(GestureCommandRouter.mayDispatchNavigation(nowMs = 1_000L, confidence = Float.POSITIVE_INFINITY))
+    }
+
+    @Test
     fun navigationHasASeparateConfidenceFloorButStillRequiresFreshness() {
         GestureCommandRouter.enabled = true
         GestureCommandRouter.lastDetectionAtMs = 950L
