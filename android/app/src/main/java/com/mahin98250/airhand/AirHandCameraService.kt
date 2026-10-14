@@ -34,6 +34,7 @@ class AirHandCameraService : LifecycleService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val inferenceExecutor = Executors.newSingleThreadExecutor()
     private val gestureEngine = AirHandGestureEngine()
+    private val cursorSmoother = AirHandCursorSmoother()
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysisUseCase: ImageAnalysis? = null
     private var handAnalyzer: HandLandmarkerAnalyzer? = null
@@ -101,6 +102,7 @@ class AirHandCameraService : LifecycleService() {
                         if (shuttingDown || !isRunning) return@HandLandmarkerAnalyzer
                         if (landmarks.size < 21) {
                             gestureEngine.reset()
+                            cursorSmoother.reset()
                             lastStableGesture = "None"
                             resetNavigationGestureState()
                             mainHandler.post { updateCursor(0f, 0f, visible = false) }
@@ -114,8 +116,11 @@ class AirHandCameraService : LifecycleService() {
                         // Map the mirrored front-camera index tip into screen coordinates.
                         val normalizedX = ((tip.x - 0.06f) / 0.88f).coerceIn(0f, 1f)
                         val normalizedY = ((tip.y - 0.06f) / 0.88f).coerceIn(0f, 1f)
-                        val screenX = normalizedX * metrics.widthPixels
-                        val screenY = normalizedY * metrics.heightPixels
+                        val rawX = normalizedX * metrics.widthPixels
+                        val rawY = normalizedY * metrics.heightPixels
+                        val smoothed = cursorSmoother.update(rawX, rawY)
+                        val screenX = smoothed.first
+                        val screenY = smoothed.second
                         mainHandler.post { updateCursor(screenX, screenY, visible = true) }
 
                         val clickEdge = reading.stable && reading.gesture == "Pinch" &&
@@ -297,6 +302,7 @@ class AirHandCameraService : LifecycleService() {
         cameraProvider = null
         handAnalyzer = null
         gestureEngine.reset()
+        cursorSmoother.reset()
         lastStableGesture = "None"
         resetNavigationGestureState()
         removeCursorOverlay()
