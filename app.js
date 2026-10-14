@@ -40,7 +40,10 @@ const game = {
 };
 let toastTimeout = null;
 
-function readBestScore() {\n  try { return Number(localStorage.getItem("airhand-best") || 0); } catch { return 0; }\n}\nfunction showToast(message) {
+function readBestScore() {
+  try { return Number(localStorage.getItem("airhand-best") || 0); } catch { return 0; }
+}
+function showToast(message) {
   const toast = $("toast");
   toast.textContent = message;
   toast.classList.add("show");
