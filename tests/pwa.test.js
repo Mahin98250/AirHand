@@ -17,8 +17,9 @@ test("AirHand declares an installable web app manifest", async () => {
 
 test("AirHand caches the same-origin app shell without caching camera frames or third-party models", async () => {
   const worker = await read("../sw.js");
-  assert.match(worker, /airhand-shell-v1/);
+  assert.match(worker, /airhand-shell-v2/);
   assert.match(worker, /"\.\/index\.html"/);
+  assert.match(worker, /"\.\/android-guide\.html"/);
   assert.match(worker, /"\.\/app\.js\?v=airhand-20261014-26"/);
   assert.match(worker, /request\.mode === "navigate"/);
   assert.match(worker, /if \(url\.origin !== self\.location\.origin\) return/);
@@ -28,7 +29,8 @@ test("AirHand caches the same-origin app shell without caching camera frames or 
 test("install controls and service worker registration are wired", async () => {
   const pwa = await read("../pwa.js");
   const html = await read("../index.html");
-  assert.match(html, /pwa\.js\?v=airhand-pwa-1/);
+  assert.match(html, /pwa\.js\?v=airhand-pwa-2/);
+  assert.match(pwa, /android-guide\.html/);
   assert.match(pwa, /beforeinstallprompt/);
   assert.match(pwa, /appinstalled/);
   assert.match(pwa, /navigator\.serviceWorker\.register\("\.\/sw\.js"\)/);
