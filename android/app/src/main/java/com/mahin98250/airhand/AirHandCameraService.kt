@@ -35,6 +35,7 @@ class AirHandCameraService : LifecycleService() {
     private val inferenceExecutor = Executors.newSingleThreadExecutor()
     private val gestureEngine = AirHandGestureEngine()
     private val cursorSmoother = AirHandCursorSmoother()
+    private var cursorBounds = CursorBounds.DEFAULT
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysisUseCase: ImageAnalysis? = null
     private var handAnalyzer: HandLandmarkerAnalyzer? = null
@@ -97,6 +98,9 @@ class AirHandCameraService : LifecycleService() {
         }
 
         shuttingDown = false
+        cursorBounds = CursorBounds.load(
+            getSharedPreferences(CursorBounds.PREFERENCES_NAME, MODE_PRIVATE)
+        )
         isRunning = true
         try {
             installCursorOverlay()
@@ -134,11 +138,10 @@ class AirHandCameraService : LifecycleService() {
                         val reading = gestureEngine.update(landmarks)
                         val tip = landmarks[8]
                         val metrics = resources.displayMetrics
-                        // Map the mirrored front-camera index tip into screen coordinates.
-                        val normalizedX = ((tip.x - 0.06f) / 0.88f).coerceIn(0f, 1f)
-                        val normalizedY = ((tip.y - 0.06f) / 0.88f).coerceIn(0f, 1f)
-                        val rawX = normalizedX * metrics.widthPixels
-                        val rawY = normalizedY * metrics.heightPixels
+                        // The app can calibrate these normalized bounds during a five-second hand sweep.
+                        // A default range is used until a valid local calibration has been saved.
+                        val rawX = cursorBounds.mapX(tip.x, metrics.widthPixels)
+                        val rawY = cursorBounds.mapY(tip.y, metrics.heightPixels)
                         val smoothed = cursorSmoother.update(rawX, rawY)
                         val screenX = smoothed.first
                         val screenY = smoothed.second
