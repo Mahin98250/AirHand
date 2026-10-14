@@ -22,6 +22,12 @@ test("the browser loads one deferred classic script and bundles local helpers", 
 test("camera preview follows the source aspect ratio to prevent cropped fingers", () => {
   assert.ok(app.includes("function fitCameraFrameToVideo()"));
   assert.ok(app.includes("function getHandFrameGuidance(landmarks)"));
+  assert.ok(app.includes("function startCursorCalibration()"));
+  assert.ok(app.includes("function collectCalibrationSample(indexTip, now)"));
+  assert.ok(app.includes("localStorage.setItem(\"airhand-cursor-calibration\""));
+  assert.ok(app.includes("function cycleDifficulty()"));
+  assert.ok(app.includes("function setSoundEnabled(enabled)"));
+  assert.ok(app.includes("game.stars.push"));
   assert.ok(app.includes("Hand near frame edge"));
   assert.ok(app.includes("Hand too close"));
   assert.ok(app.includes('cameraStage.style.aspectRatio = video.videoWidth + " / " + video.videoHeight'));
