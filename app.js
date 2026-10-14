@@ -478,9 +478,10 @@ function trackFrame(now) {
     drawLandmarks(landmarks, width, height);
     const category = geometryOnlyFallback ? null : selectBestModelGesture(result.gestures?.[0] || []);
     const raw = detectGesture(landmarks, stablePinch, category?.categoryName || null, category?.score || 0);
-    $("gestureConfidence").textContent = raw.source === "model"
+    const frameGuidance = getHandFrameGuidance(landmarks);
+    $("gestureConfidence").textContent = frameGuidance || (raw.source === "model"
       ? "Model confidence " + Math.round((raw.confidence || 0) * 100) + "%"
-      : raw.gesture === "Pinch" ? "Pinch distance normalized to palm size" : "Landmark geometry fallback";
+      : raw.gesture === "Pinch" ? "Pinch distance normalized to palm size" : "Landmark geometry fallback");
     const stable = stabilizer.update(raw.gesture, now);
     $("gesture").textContent = labels[stable] || labels.Unclear;
     updateCursor(landmarks[8]);
@@ -505,6 +506,19 @@ function trackFrame(now) {
     fpsFrames = 0;
     fpsWindowStart = now;
   }
+}
+function getHandFrameGuidance(landmarks) {
+  const xs = landmarks.map(point => point.x);
+  const ys = landmarks.map(point => point.y);
+  const left = Math.min(...xs), right = Math.max(...xs);
+  const top = Math.min(...ys), bottom = Math.max(...ys);
+  if (left < 0.055 || right > 0.945 || top < 0.055 || bottom > 0.945) {
+    return "Hand near frame edge — move it back toward the center";
+  }
+  const spanX = right - left, spanY = bottom - top;
+  if (spanX > 0.78 || spanY > 0.82) return "Hand too close — move it a little farther away";
+  if (spanX < 0.16 && spanY < 0.2) return "Hand is small — move it a little closer";
+  return "";
 }
 function selectBestModelGesture(categories) {
   return categories
