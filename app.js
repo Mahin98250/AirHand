@@ -1011,8 +1011,11 @@ $("play").addEventListener("click", () => {
   if (game.playing && game.paused) resumeGame();
   else startGame();
 });
-gameCanvas.addEventListener("pointerdown", () => {
-  if (currentMode === "game" && game.playing && !game.paused) jump();
+document.querySelector(".gamebox").addEventListener("pointerdown", event => {
+  // The overlay covers the canvas after a run ends; allow tapping its background to restart.
+  if (event.target.closest("#play") || currentMode !== "game") return;
+  if (!game.playing) startGame();
+  else if (!game.paused) jump();
 });
 window.addEventListener("keydown", event => {
   if (event.repeat || event.target?.matches?.("button, input, select, textarea")) return;
