@@ -206,8 +206,8 @@ class MainActivity : AppCompatActivity() {
         content.addView(heading("Current milestone", 20f))
         content.addView(heading("Gesture controls", 20f))
         content.addView(heading(
-            "Point to move the cursor • pinch once to tap • move an open palm up or down to scroll • hold a Peace sign for Back • hold a thumbs-up for Home • hold a fist to open recent apps. " +
-                "Long-hold actions fire once; release the pose before using it again.",
+            "Point to move the cursor • briefly pinch and release to tap • hold a steady pinch to long-press • move an open palm up or down to scroll • hold a Peace sign for Back • hold a thumbs-up for Home • hold a fist to open recent apps. " +
+                "Pinch movement cancels the tap/long-press; held navigation poses fire once until released.",
             14f
         ))
         content.addView(heading(
