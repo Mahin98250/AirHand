@@ -1,24 +1,42 @@
 # AirHand — AI Hand Gesture Controller
 
-A browser-based webcam hand-tracking demo using MediaPipe Tasks Vision. It includes a virtual in-page cursor and a hand-controlled endless runner.
+AirHand is a browser-based hand tracking and gesture control demo. Use your webcam to move an in-page virtual cursor or play an endless runner.
+
+## Features
+
+- **MediaPipe Gesture Recognizer:** trained, on-device gesture classification for pointing, peace/victory, thumbs-up, open palm and fist.
+- **Custom pinch detection:** uses thumb-to-index distance normalized by palm size, with separate pinch/release thresholds (hysteresis).
+- **Temporal stability filter:** discrete gestures must remain consistent briefly before they activate, reducing accidental mode changes and jumps.
+- **Adaptive cursor smoothing:** a small dead zone suppresses tracking jitter while larger movements get a faster response.
+- **Runner game:** randomized obstacles, jump physics, collision detection, live score and locally saved best score.
+- **Controls:** stop camera, switch mirrored preview, toggle landmarks, adjust cursor response, and manually tap the game to jump.
+- Webcam frames are processed in the browser. There is no video upload or app backend.
 
 ## Run it
 
-1. Enable GitHub Pages for this repository, or run a local static server.
+1. Open the repository with GitHub Pages enabled, or run a local static server from the repository directory.
 2. For example, run `python -m http.server 8000` and open `http://localhost:8000`.
-3. Press **Enable camera** and allow camera permission.
+3. Press **Enable camera** and grant camera permission.
 
-Camera access requires HTTPS or localhost. The MediaPipe JavaScript module, WASM runtime and hand model load from public CDNs on first use, so the first launch requires internet access. Webcam frames are processed in the browser and are not uploaded by this app.
+Camera access requires HTTPS or localhost. MediaPipe's JavaScript/WASM runtime and gesture model are loaded from public CDNs on first use, so the first launch needs an internet connection. The application has no server-side video processing, but the current release is not yet an offline-first PWA.
 
-## Gestures
+## Gesture controls
 
-- Point with your index finger: move the virtual cursor.
-- Pinch thumb and index finger: click feedback in cursor mode; jump in runner mode.
-- Peace sign: switch between cursor and runner.
-- Open palm: start the runner.
-- Thumbs-up: pause or resume the runner.
-- Tap/click the game canvas: jump as a fallback.
+| Gesture | Action |
+| --- | --- |
+| Pointing up | Move the virtual in-page cursor |
+| Thumb + index pinch | Select a virtual desktop tile / jump |
+| Peace sign (Victory) | Switch between cursor and runner |
+| Open palm | Start or resume the runner |
+| Thumbs-up | Pause the runner |
+| Tap/click the game canvas | Jump as a manual fallback |
 
-## Limitations
+## Test and quality checks
 
-The cursor is limited to the web page. Browsers cannot control the operating-system mouse or click other desktop applications without a separately installed native companion app. Gesture recognition is based on landmark geometry and can vary with lighting, camera angle and hand orientation. This is a working prototype, not an accessibility-certified system-wide controller.
+Run the automated tests with `npm test` and JavaScript syntax checks with `npm run check`. GitHub Actions runs these checks on pushes and pull requests.
+
+## Honest limitations
+
+- The cursor is confined to the AirHand webpage. Ordinary browser pages cannot move the operating-system cursor or click arbitrary desktop applications without a separately installed native companion.
+- The built-in model recognizes a small set of standard gestures. Pinch is detected geometrically; accuracy depends on lighting, hand angle, distance, camera quality and device performance.
+- The automated tests validate gesture math, filters and app wiring. A physical webcam test is still required to measure real-world recognition accuracy and responsiveness.
