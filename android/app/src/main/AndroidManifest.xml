@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
@@ -17,6 +19,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".AirHandCameraService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
         <service
             android:name=".AirHandAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
