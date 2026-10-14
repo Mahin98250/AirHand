@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { angleDegrees, clamp, CursorSmoother, detectGesture, distance2D, GestureStabilizer } from "../gesture-engine.js";
 
 function baseHand() {
@@ -63,10 +64,10 @@ test("gesture stabilizer waits for a consistent gesture and clears on hand loss"
 
 test("cursor smoother initializes promptly and suppresses micro-jitter", () => {
   const filter = new CursorSmoother(0.2);
-  assert.deepEqual(filter.update(0.3, 0.4), { x: 0.3, y: 0.4 });
-  const still = filter.update(0.3005, 0.4005);
+  assert.deepEqual(filter.update(0.3, 0.4, 0), { x: 0.3, y: 0.4 });
+  const still = filter.update(0.3005, 0.4005, 16);
   assert.deepEqual(still, { x: 0.3, y: 0.4 });
-  const moved = filter.update(0.8, 0.8);
+  const moved = filter.update(0.8, 0.8, 32);
   assert.ok(moved.x > 0.5 && moved.y > 0.5);
   assert.ok(moved.x < 0.8 && moved.y < 0.8);
 });
@@ -74,10 +75,10 @@ test("cursor smoother initializes promptly and suppresses micro-jitter", () => {
 
 test("pinch press and release thresholds have a wider hysteresis gap", () => {
   const hand = baseHand();
-  hand[8] = { x: 0.53, y: 0.45 }; // ratio about 0.30: outside press threshold
+  hand[8] = { x: 0.59, y: 0.45 }; // ratio about 0.30: outside press threshold
   assert.notEqual(detectGesture(hand, false).gesture, "Pinch");
   assert.equal(detectGesture(hand, true).gesture, "Pinch"); // still held until release threshold
-  hand[8] = { x: 0.56, y: 0.45 }; // ratio about 0.40: release
+  hand[8] = { x: 0.63, y: 0.45 }; // ratio about 0.43: release
   assert.notEqual(detectGesture(hand, true).gesture, "Pinch");
 });
 
