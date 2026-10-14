@@ -19,8 +19,8 @@ import androidx.core.content.ContextCompat
 import java.util.Locale
 
 /**
- * User-selected Android input method. Key presses commit only into the currently focused editor.
- * AirHand's accessibility cursor can tap these visible keys after the user enables both services.
+ * User-selected Android input method. Key presses commit only into the focused editor.
+ * AirHand's accessibility cursor can tap these visible keys when the user enables both services.
  */
 class AirHandInputMethodService : InputMethodService() {
     private var inputRoot: LinearLayout? = null
@@ -62,8 +62,8 @@ class AirHandInputMethodService : InputMethodService() {
 
         val rows = if (numberMode) listOf(
             listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
-            listOf("@", "#", "\$", "%", "&", "-", "+", "(", ")"),
-            listOf("ABC", "/", ":", ";", "'", "\"", "⌫"),
+            listOf("@", "#", "$", "%", "&", "-", "+", "(", ")"),
+            listOf("ABC", "/", ":", ";", "'", "\"","⌫"),
         ) else listOf(
             listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
             listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
@@ -76,13 +76,14 @@ class AirHandInputMethodService : InputMethodService() {
                 gravity = android.view.Gravity.CENTER
             }
             labels.forEach { label ->
-                val displayLabel = if (uppercase && label.length == 1 && label[0].isLetter()) label.uppercase(Locale.ROOT) else label
+                val displayLabel = if (uppercase && label.length == 1 && label[0].isLetter())
+                    label.uppercase(Locale.ROOT) else label
                 row.addView(makeKey(displayLabel) {
                     when (label) {
                         "⌫" -> currentInputConnection?.deleteSurroundingText(1, 0)
                         "⇧" -> { uppercase = !uppercase; rebuildKeyboard() }
                         "ABC" -> { numberMode = false; rebuildKeyboard() }
-                        else -> commit(label)
+                        else -> commit(displayLabel)
                     }
                 }, keyLayout(1f))
             }
@@ -137,7 +138,10 @@ class AirHandInputMethodService : InputMethodService() {
     private fun commit(text: String) {
         val connection: InputConnection? = currentInputConnection
         connection?.commitText(text, 1)
-        if (text.isNotEmpty() && text != "\n" && text != " ") uppercase = false
+        if (uppercase && text.length == 1 && text[0].isLetter()) {
+            uppercase = false
+            rebuildKeyboard()
+        }
     }
 
     private fun startVoiceRecognition() {
@@ -173,9 +177,7 @@ class AirHandInputMethodService : InputMethodService() {
                 }
                 override fun onResults(results: Bundle?) {
                     val transcript = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                    if (!transcript.isNullOrBlank()) {
-                        currentInputConnection?.commitText(transcript.trim() + " ", 1)
-                    }
+                    if (!transcript.isNullOrBlank()) currentInputConnection?.commitText(transcript.trim() + " ", 1)
                     listening = false
                     updateVoiceKey("Voice")
                     disposeRecognizer()
