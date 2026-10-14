@@ -255,7 +255,7 @@ function updateCameraUI(active) {
   $("status").textContent = active ? "Camera on" : "Camera off";
   $("stage").classList.toggle("on", active);
   $("placeholder").classList.toggle("hidden", active);
-  $("action").disabled = !active;
+  $("action").disabled = false;
   $("stopCamera").disabled = !active;
   $("action").textContent = active
     ? (currentMode === "cursor" ? "Re-center cursor →" : "Restart runner →")
@@ -369,7 +369,7 @@ async function startCamera() {
   } finally {
     $("start").disabled = false;
     $("start2").disabled = false;
-    $("action").disabled = !cameraActive;
+    $("action").disabled = false;
   }
 }
 
