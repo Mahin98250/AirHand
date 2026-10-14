@@ -49,7 +49,7 @@ The downloaded model is ignored by Git so a large binary is not accidentally com
 6. Grant AirHand the **Display over other apps** permission.
 7. Grant notification permission on Android 13+ when asked. System-wide mode blocks startup if the Stop notification cannot be shown.
 8. Return to AirHand, tap **Start system-wide gesture control**, and confirm the explanation. The camera is active while the foreground service is running.
-9. Test cursor movement and gestures in a harmless app first. Use the persistent notification's Stop action or AirHand's Emergency stop to end control.
+9. Test cursor movement and gestures in a harmless app first. Use the notification's Pause action to temporarily disable gesture input, or Stop / AirHand's Emergency stop to end control.
 
 ## Permission and privacy model
 
@@ -57,6 +57,7 @@ The downloaded model is ignored by Git so a large binary is not accidentally com
 - Microphone permission is requested for the IME's use of SpeechRecognizer. The provider may require network access. The app asks for offline preference where supported but cannot guarantee offline speech.
 - Accessibility and overlay capabilities require the user to enable them in Android Settings.
 - Camera frames and hand inference remain on-device. MediaPipe may separately collect SDK usage/performance metrics according to its privacy notice: https://goo.gle/mediapipe-privacy.
+- The persistent notification has separate Pause and Stop actions. Pause disables gesture injection but leaves camera tracking running; Stop releases camera/overlay resources.
 - Camera access while other apps are in front is subject to Android version, foreground-service, permission and device-vendor restrictions.
 - Secure windows, permission dialogs, banking/payment surfaces and restricted apps may prevent clicks.
 
