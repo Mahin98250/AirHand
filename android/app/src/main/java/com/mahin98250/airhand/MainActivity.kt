@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.PointF
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -33,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var detectionStatus: TextView
     private lateinit var cameraButton: Button
+    private lateinit var calibrationButton: Button
     private lateinit var systemControlButton: Button
     private lateinit var previewView: PreviewView
     private var cameraController: LifecycleCameraController? = null
@@ -42,6 +45,10 @@ class MainActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private val gestureEngine = AirHandGestureEngine()
+    private val cursorCalibrationLock = Any()
+    @Volatile private var collectingCursorCalibration = false
+    private var cursorCalibrationStartedAtMs = 0L
+    private var cursorRangeCalibrator: CursorRangeCalibrator? = null
 
     private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
@@ -155,6 +162,13 @@ class MainActivity : AppCompatActivity() {
             else cameraPermission.launch(Manifest.permission.CAMERA)
         }
         content.addView(cameraButton)
+        calibrationButton = button("Calibrate cursor range · 5 seconds") { beginCursorCalibration() }
+        calibrationButton.isEnabled = false
+        content.addView(calibrationButton)
+        content.addView(heading(
+            "For calibration, show one hand clearly and sweep your index fingertip slowly through the widest comfortable area for five seconds. AirHand saves only the movement range, not camera images.",
+            12f
+        ))
         systemControlButton = button("Start system-wide gesture control") { requestSystemWideControl() }
         content.addView(systemControlButton)
 
@@ -282,6 +296,7 @@ class MainActivity : AppCompatActivity() {
             val analyzer = HandLandmarkerAnalyzer(
                 context = this,
                 onFrame = { landmarks, latencyMs ->
+                    collectCursorCalibrationFrame(landmarks)
                     val reading = gestureEngine.update(landmarks)
                     if (landmarks.isNotEmpty()) GestureCommandRouter.lastDetectionAtMs = System.currentTimeMillis()
                     runOnUiThread {
@@ -327,6 +342,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun stopCameraPreview(updateStatus: Boolean) {
         cameraPreviewActive = false
+        synchronized(cursorCalibrationLock) {
+            collectingCursorCalibration = false
+            cursorRangeCalibrator = null
+        }
         try { cameraController?.clearImageAnalysisAnalyzer() } catch (_: Exception) { }
         try { handAnalyzer?.close() } catch (_: Exception) { }
         handAnalyzer = null
@@ -339,6 +358,55 @@ class MainActivity : AppCompatActivity() {
         refreshCameraButton()
     }
 
+    private fun beginCursorCalibration() {
+        if (!cameraPreviewActive) {
+            status.text = "Start hand tracking first, then begin cursor calibration."
+            return
+        }
+        synchronized(cursorCalibrationLock) {
+            cursorRangeCalibrator = CursorRangeCalibrator()
+            cursorCalibrationStartedAtMs = SystemClock.elapsedRealtime()
+            collectingCursorCalibration = true
+        }
+        calibrationButton.isEnabled = false
+        status.text = "Calibration started. Sweep your index fingertip slowly through the widest comfortable range for five seconds."
+        detectionStatus.text = "Calibrating cursor range… keep your hand visible and move horizontally and vertically."
+    }
+
+    private fun collectCursorCalibrationFrame(landmarks: List<PointF>) {
+        var finished = false
+        var result: CursorBounds? = null
+        synchronized(cursorCalibrationLock) {
+            if (!collectingCursorCalibration) return
+            if (landmarks.size >= 21) {
+                cursorRangeCalibrator?.add(landmarks[8].x, landmarks[8].y)
+            }
+            val elapsed = SystemClock.elapsedRealtime() - cursorCalibrationStartedAtMs
+            if (elapsed >= CURSOR_CALIBRATION_DURATION_MS) {
+                result = cursorRangeCalibrator?.finish()
+                collectingCursorCalibration = false
+                cursorRangeCalibrator = null
+                finished = true
+            }
+        }
+        if (!finished) return
+        val calibratedBounds = result
+        if (calibratedBounds != null) {
+            calibratedBounds.saveTo(getSharedPreferences(CursorBounds.PREFERENCES_NAME, MODE_PRIVATE))
+        }
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            calibrationButton.isEnabled = cameraPreviewActive
+            if (calibratedBounds != null) {
+                status.text = "Cursor range saved on this device. Stop any system-wide session and start it again to apply the new mapping."
+                detectionStatus.text = "Calibration saved. Move your index finger to test the range."
+            } else {
+                status.text = "Calibration was not saved. Keep your hand in frame and sweep farther both horizontally and vertically, then try again."
+                detectionStatus.text = "Range too small or too few valid hand samples. No settings were changed."
+            }
+        }
+    }
+
     private fun refreshCameraButton() {
         if (!::cameraButton.isInitialized) return
         cameraButton.text = when {
@@ -347,11 +415,18 @@ class MainActivity : AppCompatActivity() {
                 "Start hand tracking"
             else -> "Enable camera / start hand tracking"
         }
+        if (::calibrationButton.isInitialized) {
+            calibrationButton.isEnabled = cameraPreviewActive && !collectingCursorCalibration
+        }
     }
 
     private fun refreshSystemControlButton() {
         if (!::systemControlButton.isInitialized) return
         systemControlButton.text = if (AirHandCameraService.isRunning) "Stop system-wide gesture control"
         else "Start system-wide gesture control"
+    }
+
+    companion object {
+        private const val CURSOR_CALIBRATION_DURATION_MS = 5_000L
     }
 }
