@@ -6,6 +6,11 @@ const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 const referencedIds = new Set([...app.matchAll(/\$\("([^"]+)"\)/g)].map(match => match[1]));
+const allHtmlIds = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
+
+test("HTML uses unique IDs so every click handler targets exactly one control", () => {
+  assert.equal(allHtmlIds.length, new Set(allHtmlIds).size, "Duplicate HTML IDs make controls ambiguous");
+});
 
 test("every statically referenced UI ID exists in index.html", () => {
   const missing = [...referencedIds].filter(id => !htmlIds.has(id));
