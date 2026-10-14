@@ -246,6 +246,11 @@ let lastPeaceSwitch = 0;
 let lastThumbToggle = 0;
 let lastGameFrame = 0;
 let stablePinch = false;
+let dwellEnabled = false;
+let dwellCandidate = null;
+let dwellStartedAt = 0;
+let dwellTriggeredTarget = null;
+let dragSource = null;
 let pageIsClosing = false;
 let cursorSensitivity = 0.22;
 let mirrorCamera = true;
@@ -631,18 +636,29 @@ function selectBestModelGesture(categories) {
     .sort((a, b) => b.score - a.score)[0] || null;
 }
 function startCursorCalibration() {
-  if (!cameraActive) {
-    showToast("Enable the camera first.");
-    return;
-  }
+  if (!cameraActive) { showToast("Enable the camera first."); return; }
   calibrationFeedbackUntil = 0;
   calibrationFeedbackText = "";
-  calibrationRun = { startedAt: performance.now(), minX: 1, maxX: 0, minY: 1, maxY: 0, frames: 0 };
+  calibrationRun = { startedAt: performance.now(), minX: 1, maxX: 0, minY: 0, maxY: 1, frames: 0, step: -1 };
   cursorFilter.reset(0.5, 0.5);
   $("calibrate").disabled = true;
   $("calibrate").textContent = "Calibrating…";
-  $("gestureConfidence").textContent = "Sweep your index finger across your comfortable range for 5 seconds";
-  showToast("Calibration started — slowly trace a wide box with your index finger.");
+  setCalibrationTarget(0);
+  $("gestureConfidence").textContent = "Follow the target: top-left, top-right, bottom-right, bottom-left";
+  showToast("Guided calibration started — follow the blue target with your cursor.");
+}
+function setCalibrationTarget(step) {
+  const target = $("calibrationTarget");
+  const positions = [
+    { left: "8%", top: "12%", label: "TOP LEFT" },
+    { left: "92%", top: "12%", label: "TOP RIGHT" },
+    { left: "92%", top: "88%", label: "BOTTOM RIGHT" },
+    { left: "8%", top: "88%", label: "BOTTOM LEFT" }
+  ];
+  const position = positions[Math.max(0, Math.min(3, step))];
+  target.style.left = position.left; target.style.top = position.top;
+  target.title = position.label; target.dataset.target = position.label;
+  target.classList.remove("hidden");
 }
 function collectCalibrationSample(indexTip, now) {
   if (!calibrationRun) return false;
@@ -652,11 +668,16 @@ function collectCalibrationSample(indexTip, now) {
   calibrationRun.minY = Math.min(calibrationRun.minY, indexTip.y);
   calibrationRun.maxY = Math.max(calibrationRun.maxY, indexTip.y);
   calibrationRun.frames++;
-  const remaining = Math.max(0, 5 - (now - calibrationRun.startedAt) / 1000);
-  $("gestureConfidence").textContent = "Calibrating · " + remaining.toFixed(1) + "s · move across your usable range";
+  const elapsed = now - calibrationRun.startedAt;
+  const step = Math.min(3, Math.floor(elapsed / 1250));
+  if (step !== calibrationRun.step) { calibrationRun.step = step; setCalibrationTarget(step); }
+  const remaining = Math.max(0, 5 - elapsed / 1000);
+  const steps = ["top-left", "top-right", "bottom-right", "bottom-left"];
+  $("gestureConfidence").textContent = "Guided calibration · " + steps[step] + " · " + remaining.toFixed(1) + "s";
   if (remaining > 0) return true;
 
   const run = calibrationRun;
+  $("calibrationTarget").classList.add("hidden");
   calibrationRun = null;
   const spanX = run.maxX - run.minX;
   const spanY = run.maxY - run.minY;
@@ -688,12 +709,7 @@ function collectCalibrationSample(indexTip, now) {
 function mapCalibratedRange(value, min, max) {
   return clamp((value - min) / Math.max(0.001, max - min), 0, 1);
 }
-function updateCursor(indexTip) {
-  if (calibrationRun) {
-    $("cursor").style.left = "50%";
-    $("cursor").style.top = "50%";
-    return;
-  }
+function updateCursor(indexTip, now = performance.now()) {
   const targetX = mirrorCamera ? 1 - indexTip.x : indexTip.x;
   const mappedX = mapCalibratedRange(targetX, cursorCalibration.minX, cursorCalibration.maxX);
   const mappedY = mapCalibratedRange(indexTip.y, cursorCalibration.minY, cursorCalibration.maxY);
@@ -704,12 +720,53 @@ function updateCursor(indexTip) {
   document.querySelectorAll(".mini").forEach(tile => tile.classList.remove("hovered"));
   if (currentMode === "cursor") {
     const rect = document.querySelector(".cards").getBoundingClientRect();
-    const target = document.elementFromPoint(
-      rect.left + clamp(point.x, 0.01, 0.99) * rect.width,
-      rect.top + clamp(point.y, 0.05, 0.95) * rect.height
-    )?.closest(".mini");
+    const target = document.elementFromPoint(rect.left + clamp(point.x, 0.01, 0.99) * rect.width, rect.top + clamp(point.y, 0.05, 0.95) * rect.height)?.closest(".mini");
     if (target) target.classList.add("hovered");
+    updateDwellTarget(target, now);
   }
+}
+function getVirtualTargetAtCursor() {
+  const rect = document.querySelector(".cards").getBoundingClientRect();
+  return document.elementFromPoint(rect.left + clamp(cursorFilter.x, 0.01, 0.99) * rect.width, rect.top + clamp(cursorFilter.y, 0.05, 0.95) * rect.height)?.closest(".mini") || null;
+}
+function selectVirtualTarget(target, action = "selected") {
+  if (!target) return;
+  document.querySelectorAll(".mini").forEach(tile => tile.classList.remove("selected"));
+  target.classList.add("selected");
+  const names = { explore: "Explore", create: "Create", discover: "Discover" };
+  showToast((names[target.dataset.tile] || "Tile") + (action === "selected" ? " selected" : " · " + action));
+}
+function updateDwellTarget(target, now = performance.now()) {
+  const progress = $("dwellProgress"), fill = progress.querySelector("span");
+  if (!dwellEnabled || stablePinch || calibrationRun || !target) {
+    dwellCandidate = null; dwellStartedAt = 0; dwellTriggeredTarget = null;
+    progress.classList.remove("active"); fill.style.width = "0%"; return;
+  }
+  if (target !== dwellCandidate) { dwellCandidate = target; dwellStartedAt = now; dwellTriggeredTarget = null; }
+  const ratio = clamp((now - dwellStartedAt) / 850, 0, 1);
+  progress.classList.add("active"); fill.style.width = (ratio * 100) + "%";
+  if (ratio >= 1 && dwellTriggeredTarget !== target) {
+    dwellTriggeredTarget = target; selectVirtualTarget(target, "Dwell click"); playTone(640, 0.055);
+  }
+}
+function beginVirtualDrag() {
+  if (currentMode !== "cursor") return;
+  const target = getVirtualTargetAtCursor();
+  if (!target) { dragSource = null; showToast("Move over a tile before pinching to drag."); return; }
+  dragSource = target; dragSource.classList.add("dragging", "selected");
+  dwellCandidate = null;
+  $("gestureConfidence").textContent = "Dragging · release pinch over another tile to drop";
+}
+function finishVirtualDrag() {
+  if (!dragSource) { const target = getVirtualTargetAtCursor(); if (target && currentMode === "cursor") selectVirtualTarget(target); return; }
+  const source = dragSource, target = getVirtualTargetAtCursor();
+  source.classList.remove("dragging"); dragSource = null;
+  if (target && target !== source) {
+    const tiles = [...document.querySelectorAll(".mini")], a = tiles.indexOf(source), b = tiles.indexOf(target);
+    if (a < b) target.after(source); else target.before(source);
+    selectVirtualTarget(source, "dropped"); showToast("Tile moved into position.");
+  } else if (target === source) selectVirtualTarget(source);
+  else { source.classList.remove("selected"); showToast("Drag cancelled — release over a tile to drop."); }
 }
 function handleStableGesture(gesture, previous, now, landmarks = null, source = null) {
   const reliableDiscreteGesture = geometryOnlyFallback || source === "model";
@@ -720,11 +777,12 @@ function handleStableGesture(gesture, previous, now, landmarks = null, source = 
   }
   if (gesture === "Pinch" && previous !== "Pinch") {
     stablePinch = true;
-    if (currentMode === "cursor") activateVirtualTarget();
+    if (currentMode === "cursor") beginVirtualDrag();
     else if (currentMode === "game" && !game.playing) startGame();
     else if (game.playing && !game.paused) jump();
   } else if (previous === "Pinch") {
     stablePinch = false;
+    finishVirtualDrag();
   }
 
   if (currentMode === "game") {
@@ -1051,6 +1109,13 @@ $("mirrorToggle").addEventListener("change", event => {
   if (cameraActive) $("gestureConfidence").textContent = "Preview changed — recalibrate for best cursor accuracy";
 });
 $("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; });
+$("dwellToggle").addEventListener("change", event => {
+  dwellEnabled = event.target.checked;
+  $("dwellValue").textContent = dwellEnabled ? "On · 850 ms" : "Off";
+  dwellCandidate = null; dwellStartedAt = 0; dwellTriggeredTarget = null;
+  $("dwellProgress").classList.remove("active"); $("dwellProgress").querySelector("span").style.width = "0%";
+  showToast(dwellEnabled ? "Dwell click enabled — pause over a tile to select it." : "Dwell click disabled.");
+});
 $("action").addEventListener("click", () => {
   if (!cameraActive) return startCamera();
   if (currentMode === "cursor") {
