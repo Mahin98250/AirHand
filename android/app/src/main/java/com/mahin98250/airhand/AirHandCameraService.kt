@@ -290,7 +290,12 @@ class AirHandCameraService : LifecycleService() {
                         lastStableGesture = reading.gesture
                     },
                     onError = { message ->
+                        // Drop every pending interaction when inference fails. A recovered
+                        // camera frame must start a fresh gesture rather than finish an old one.
                         GestureCommandRouter.lastDetectionAtMs = 0L
+                        pinchInteraction.reset()
+                        resetNavigationGestureState()
+                        lastStableGesture = "None"
                         cursorSmoother.reset()
                         mainHandler.post {
                             if (!shuttingDown) {
