@@ -1,4 +1,4 @@
-import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm";
+import { FilesetResolver, GestureRecognizer } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm";
 import { clamp, detectGesture, GestureStabilizer, CursorSmoother } from "./gesture-engine.js";
 
 const $ = id => document.getElementById(id);
@@ -9,7 +9,7 @@ const gameCanvas = $("game");
 const gameContext = gameCanvas.getContext("2d");
 const cameraStage = $("stage");
 
-let landmarker = null;
+let gestureRecognizer = null;
 let mediaStream = null;
 let cameraActive = false;
 let trackingFrame = 0;
@@ -101,10 +101,10 @@ async function startCamera() {
       minTrackingConfidence: 0.60
     };
     try {
-      landmarker = await HandLandmarker.createFromOptions(vision, {
+      gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
         ...modelOptions,
         baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-tasks/gesture_recognizer/gesture_recognizer.task",
           delegate: "GPU"
         }
       });
@@ -132,7 +132,7 @@ async function startCamera() {
   } catch (error) {
     console.error("AirHand camera startup failed:", error);
     stopMediaTracks();
-    if (landmarker) { landmarker.close(); landmarker = null; }
+    if (gestureRecognizer) { gestureRecognizer.close(); gestureRecognizer = null; }
     video.srcObject = null;
     updateCameraUI(false);
     setReady("Camera couldn't start", error?.message || "Check camera permission, then try again.");
@@ -209,13 +209,13 @@ function drawLandmarks(landmarks, width, height) {
   });
 }
 function trackFrame(now) {
-  if (!cameraActive || !landmarker) return;
+  if (!cameraActive || !gestureRecognizer) return;
   trackingFrame = requestAnimationFrame(trackFrame);
   if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
   let result;
   try {
-    result = landmarker.detectForVideo(video, now);
+    result = gestureRecognizer.recognizeForVideo(video, now);
   } catch (error) {
     console.warn("Skipping a frame after inference error:", error);
     return;
@@ -227,7 +227,11 @@ function trackFrame(now) {
   if (result.landmarks?.length) {
     const landmarks = result.landmarks[0];
     drawLandmarks(landmarks, width, height);
-    const raw = detectGesture(landmarks, stablePinch);
+    const category = result.gestures?.[0]?.[0];
+    const raw = detectGesture(landmarks, stablePinch, category?.categoryName || null, category?.score || 0);
+    $("gestureConfidence").textContent = raw.source === "model"
+      ? "Model confidence " + Math.round((raw.confidence || 0) * 100) + "%"
+      : raw.gesture === "Pinch" ? "Pinch distance normalized to palm size" : "Landmark geometry fallback";
     const stable = stabilizer.update(raw.gesture, now);
     $("gesture").textContent = labels[stable] || labels.Unclear;
     updateCursor(landmarks[8]);
@@ -243,6 +247,7 @@ function trackFrame(now) {
       lastStableGesture = "None";
     }
     $("gesture").textContent = "No hand detected";
+    $("gestureConfidence").textContent = "Keep your hand in view";
   }
 
   fpsFrames++;
