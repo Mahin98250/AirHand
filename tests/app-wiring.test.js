@@ -18,7 +18,7 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the browser loads one deferred classic script and bundles local helpers", () => {
-  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-22"></script>'));
+  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-23"></script>'));
   assert.ok(app.includes("function detectGesture("));
   assert.ok(app.includes("function reportAirHandRuntimeError("));
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
@@ -187,4 +187,16 @@ test("Air Drive steering visibly moves the car and Space applies braking", () =>
   assert.ok(app.includes("if (drive.braking) drive.speed = Math.max(0, drive.speed - dt * 105)"));
   assert.ok(app.includes('if (currentMode === "drive" && event.code === "Space") drive.braking = false;'));
   assert.ok(app.includes("freeLanes.length ? freeLanes : lanes"));
+});
+
+
+test("Air Drive touch controls are present, accessible, and release steering or braking cleanly", () => {
+  for (const id of ["driveLeft", "driveRight", "driveBrake"]) assert.ok(html.includes('id="' + id + '"'));
+  assert.ok(html.includes('aria-label="Touch driving controls"'));
+  assert.ok(html.includes(".drive-controls .drive-pad button:active"));
+  assert.ok(app.includes("function bindDriveHold("));
+  assert.ok(app.includes('bindDriveHold("driveLeft"'));
+  assert.ok(app.includes('bindDriveHold("driveRight"'));
+  assert.ok(app.includes('bindDriveHold("driveBrake"'));
+  assert.ok(app.includes('button.addEventListener("pointercancel", release)'));
 });
