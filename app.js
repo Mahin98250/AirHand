@@ -96,7 +96,15 @@ async function startCamera() {
     video.srcObject = mediaStream;
     await video.play();
 
-    // Load MediaPipe only after the UI has already initialized and the user starts the camera.\n    // A CDN outage must not prevent navigation and non-camera controls from working.\n    if (!FilesetResolver) {\n      const mediaPipeModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm");\n      FilesetResolver = mediaPipeModule.FilesetResolver;\n      GestureRecognizer = mediaPipeModule.GestureRecognizer;\n      HandLandmarker = mediaPipeModule.HandLandmarker;\n    }\n    const vision = await FilesetResolver.forVisionTasks(
+    // Load MediaPipe only after the UI has already initialized and the user starts the camera.
+    // A CDN outage must not prevent navigation and non-camera controls from working.
+    if (!FilesetResolver) {
+      const mediaPipeModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm");
+      FilesetResolver = mediaPipeModule.FilesetResolver;
+      GestureRecognizer = mediaPipeModule.GestureRecognizer;
+      HandLandmarker = mediaPipeModule.HandLandmarker;
+    }
+    const vision = await FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
     );
     const modelOptions = {
