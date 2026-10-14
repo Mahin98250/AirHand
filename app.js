@@ -417,7 +417,7 @@ async function startCamera() {
     if (!SteeringController) {
       const steeringModule = await import("./steering-engine.js");
       SteeringController = steeringModule.SteeringController;
-      driveSteering = new SteeringController({ maxTurnRadians: 0.48, smoothing: 0.42 });
+      driveSteering = new SteeringController({ maxTurnRadians: 0.48, smoothing: 0.42, inverted: false });
     }
     if (!FilesetResolver) {
       const mediaPipeModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs");
@@ -1041,9 +1041,13 @@ function drawDriveCar(ctx, x, y, scale, color = "#43d8ff", steering = 0, player 
   // Rear spoiler and bumper.
   ctx.fillStyle = "#0a1623"; ctx.fillRect(-23, -13, 46, 4);
   ctx.fillStyle = "#26394b"; ctx.fillRect(-23, 13, 46, 4);
+  // Diffuser fins, vents and exhaust details give the rear silhouette more depth.
+  ctx.fillStyle = "#09121c"; for (let vent = -2; vent <= 2; vent++) ctx.fillRect(vent * 5 - 1, 14, 2, 3);
+  ctx.fillStyle = "#8da4b7"; ctx.fillRect(-6, 18, 4, 2); ctx.fillRect(2, 18, 4, 2);
   ctx.fillStyle = "#080d14"; ctx.fillRect(-10, 16, 20, 3);
   // Distinct brake/tail lamps.
   ctx.fillStyle = "#ff334f"; ctx.fillRect(-22, 5, 8, 5); ctx.fillRect(14, 5, 8, 5);
+  ctx.fillStyle = "#ff244a44"; ctx.fillRect(-25, 3, 13, 9); ctx.fillRect(12, 3, 13, 9);
   ctx.fillStyle = "#ffb0b5"; ctx.fillRect(-21, 5, 5, 2); ctx.fillRect(16, 5, 5, 2);
   if (player && drive.braking) {
     ctx.fillStyle = "#ff536b88";
@@ -1157,6 +1161,15 @@ function renderDrive() {
   const asphalt = ctx.createLinearGradient(0, horizon, 0, height);
   asphalt.addColorStop(0, "#414b57"); asphalt.addColorStop(0.55, "#303943"); asphalt.addColorStop(1, "#202832");
   ctx.fillStyle = asphalt; ctx.fill();
+  // Perspective grain gives the asphalt subtle directional texture.
+  for (let i = 0; i < 24; i++) {
+    const depth = ((i / 24 + drive.roadOffset * 0.0013) % 1 + 1) % 1;
+    const y = horizon + (height - horizon) * depth * depth;
+    const road = driveRoadGeometry(width, height, y);
+    const x = road.center + Math.sin(i * 2.4 + drive.roadOffset * .002) * road.half * .72;
+    ctx.strokeStyle = "#c9d5df0b"; ctx.lineWidth = .5 + depth;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.sin(i) * (2 + depth * 5), y + 4 + depth * 13); ctx.stroke();
+  }
   // Fine asphalt flecks remain low contrast so the road stays readable.
   for (let i = 0; i < 170; i++) {
     const seed = (i * 73.17) % 1;
@@ -1635,6 +1648,18 @@ $("play").addEventListener("click", () => {
 });
 $("drivePlay").addEventListener("click", () => { if (currentMode !== "drive") switchMode("drive"); startDrive(); });
 $("driveCalibrate").addEventListener("click", calibrateDriveSteering);
+$("driveInvert").addEventListener("click", () => {
+  if (!driveSteering) { showToast("Enable the camera first, then adjust steering direction."); return; }
+  driveSteering.inverted = !driveSteering.inverted;
+  driveSteering.value = 0;
+  drive.steer = 0;
+  $("driveInvert").setAttribute("aria-pressed", String(driveSteering.inverted));
+  $("driveInvert").textContent = driveSteering.inverted ? "↔ Reverse steering: on" : "↔ Reverse steering: off";
+  $("driveGuidance").textContent = driveSteering.inverted
+    ? "Reverse steering on · test left/right, then recalibrate"
+    : "Reverse steering off · test left/right, then recalibrate";
+  showToast(driveSteering.inverted ? "Steering direction reversed." : "Steering direction restored.");
+});
 $("driveReset").addEventListener("click", () => { drive.playing = false; drive.braking = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Show both hands like you are holding a steering wheel, then calibrate."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); renderDrive(); });
 function bindDriveHold(id, onPress, onRelease) {
   const button = $(id);
