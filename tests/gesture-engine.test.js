@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { angleDegrees, clamp, CursorSmoother, detectGesture, distance2D, GestureStabilizer, SteeringController } from "../gesture-engine.js";
+import { SteeringController as LiveSteeringController } from "../steering-engine.js";
 
 function baseHand() {
   const points = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5 }));
@@ -134,4 +135,16 @@ test("two-hand steering rejects hands too close and safely recenters when tracki
   assert.equal(lost.detected, false);
   assert.ok(Math.abs(lost.value) < 1);
   assert.equal(lost.confidence, 0);
+});
+
+
+test("Phase 8 live steering responds to small wheel turns with quicker smoothing", () => {
+  const hand = (x, y) => { const points = Array.from({ length: 21 }, () => ({ x, y })); points[0] = { x, y }; return points; };
+  const steering = new LiveSteeringController();
+  const left = hand(0.25, 0.5), right = hand(0.75, 0.5);
+  assert.equal(steering.calibrate(left, right), true);
+  const result = steering.update(left, hand(0.75, 0.455), 20);
+  assert.ok(Math.abs(result.value) > 0.05, "a small wrist-line rotation should visibly steer");
+  assert.ok(steering.smoothing >= 0.4);
+  assert.ok(steering.maxTurnRadians <= 0.5);
 });
