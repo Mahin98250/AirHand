@@ -21,7 +21,7 @@ test("the browser loads one deferred classic script and bundles local helpers", 
 
 test("the page does not statically import the external AI CDN", () => {
   assert.equal(app.includes('import { FilesetResolver'), false);
-  assert.ok(app.includes('await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm")'));
+  assert.ok(app.includes('await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs")'));
   assert.ok(app.includes("Camera access requires HTTPS or localhost"));
 });
 
