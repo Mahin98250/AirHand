@@ -58,12 +58,13 @@ export class SteeringController {
     while (delta > Math.PI) delta -= Math.PI * 2;
     while (delta < -Math.PI) delta += Math.PI * 2;
     // Ignore small natural tremor, then map wheel rotation into a bounded steering range.
-    const deadZone = 0.018;
+    const deadZone = 0.012;
     const corrected = Math.abs(delta) <= deadZone ? 0 : Math.sign(delta) * (Math.abs(delta) - deadZone);
     // Default to direct mapping; offer a live switch for camera/mirror coordinate differences.
     const direction = this.inverted ? -1 : 1;
     const target = clamp(direction * corrected / this.maxTurnRadians, -1, 1);
-    this.value += (target - this.value) * this.smoothing;
+    const adaptiveSmoothing = Math.abs(target - this.value) > 0.35 ? Math.max(this.smoothing, 0.68) : this.smoothing;
+    this.value += (target - this.value) * adaptiveSmoothing;
     this.confidence = clamp((pair.span - this.minHandSpan) / 0.20, 0.4, 1);
     return { value: this.value, confidence: this.confidence, detected: true, calibrated: true };
   }
