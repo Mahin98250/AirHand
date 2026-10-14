@@ -18,7 +18,7 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the browser loads one deferred classic script and bundles local helpers", () => {
-  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-12"></script>'));
+  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-13"></script>'));
   assert.ok(app.includes("function detectGesture("));
   assert.ok(app.includes("function reportAirHandRuntimeError("));
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
@@ -67,4 +67,22 @@ test("the app uses the Gesture Recognizer and local pinch fallback", () => {
   assert.ok(app.includes("detectGesture(landmarks, stablePinch"));
   assert.ok(app.includes("requestAnimationFrame(trackFrame)"));
   assert.ok(app.includes("requestAnimationFrame(gameFrame)"));
+});
+
+
+test("Phase 2 exposes optional dwell-click and drag-and-drop interaction", () => {
+  assert.ok(html.includes('id="dwellToggle"'));
+  assert.ok(html.includes('id="dwellProgress"'));
+  assert.ok(html.includes('id="calibrationTarget"'));
+  assert.ok(app.includes("function updateDwellTarget(target"));
+  assert.ok(app.includes("function beginVirtualDrag()"));
+  assert.ok(app.includes("function finishVirtualDrag()"));
+  assert.ok(app.includes('$("dwellToggle").addEventListener("change"'));
+  assert.ok(app.includes("release pinch over another tile to drop"));
+});
+
+test("guided calibration cycles through four workspace corners", () => {
+  assert.ok(app.includes("function setCalibrationTarget(step)"));
+  for (const corner of ['"TOP LEFT"','"TOP RIGHT"','"BOTTOM RIGHT"','"BOTTOM LEFT"']) assert.ok(app.includes(corner));
+  assert.ok(app.includes("Guided calibration · "));
 });
