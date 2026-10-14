@@ -166,12 +166,15 @@ class AirHandCameraService : LifecycleService() {
                             if (peaceStartedAtMs == 0L) peaceStartedAtMs = now
                             if (!backTriggeredForPeace && now - peaceStartedAtMs >= BACK_HOLD_MS &&
                                 now - lastBackAtMs >= BACK_COOLDOWN_MS) {
-                                val sent = AirHandAccessibilityService.instance?.performNavigation(
-                                    AirHandAccessibilityService.NavigationAction.BACK, reading.confidence
-                                ) == true
-                                if (sent) {
-                                    backTriggeredForPeace = true
-                                    lastBackAtMs = now
+                                // Accessibility actions are dispatched on the main thread.
+                                // Latch before posting so one held pose cannot queue repeated Back actions.
+                                backTriggeredForPeace = true
+                                lastBackAtMs = now
+                                val confidence = reading.confidence
+                                mainHandler.post {
+                                    AirHandAccessibilityService.instance?.performNavigation(
+                                        AirHandAccessibilityService.NavigationAction.BACK, confidence
+                                    )
                                 }
                             }
                         } else {
