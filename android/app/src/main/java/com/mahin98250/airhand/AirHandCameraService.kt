@@ -165,32 +165,31 @@ class AirHandCameraService : LifecycleService() {
                             nowMs = System.currentTimeMillis(),
                             density = resources.displayMetrics.density
                         )
-                        when (pinchAction?.type) {
-                            PinchActionType.TAP -> {
-                                val action = pinchAction
-                                val now = System.currentTimeMillis()
-                                if (now - lastTapAtMs >= CLICK_COOLDOWN_MS) {
-                                    lastTapAtMs = now
-                                    mainHandler.post {
-                                        AirHandAccessibilityService.instance?.performTapAt(
-                                            action.x, action.y, action.confidence
-                                        )
+                        pinchAction?.let { action ->
+                            when (action.type) {
+                                PinchActionType.TAP -> {
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastTapAtMs >= CLICK_COOLDOWN_MS) {
+                                        lastTapAtMs = now
+                                        mainHandler.post {
+                                            AirHandAccessibilityService.instance?.performTapAt(
+                                                action.x, action.y, action.confidence
+                                            )
+                                        }
+                                    }
+                                }
+                                PinchActionType.LONG_PRESS -> {
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastLongPressAtMs >= LONG_PRESS_COOLDOWN_MS) {
+                                        lastLongPressAtMs = now
+                                        mainHandler.post {
+                                            AirHandAccessibilityService.instance?.performLongPressAt(
+                                                action.x, action.y, action.confidence
+                                            )
+                                        }
                                     }
                                 }
                             }
-                            PinchActionType.LONG_PRESS -> {
-                                val action = pinchAction
-                                val now = System.currentTimeMillis()
-                                if (now - lastLongPressAtMs >= LONG_PRESS_COOLDOWN_MS) {
-                                    lastLongPressAtMs = now
-                                    mainHandler.post {
-                                        AirHandAccessibilityService.instance?.performLongPressAt(
-                                            action.x, action.y, action.confidence
-                                        )
-                                    }
-                                }
-                            }
-                            null -> Unit
                         }
 
                         // Open palm is an explicit scroll mode: move the whole hand vertically.
