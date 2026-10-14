@@ -86,3 +86,8 @@ test("guided calibration cycles through four workspace corners", () => {
   for (const corner of ['"TOP LEFT"','"TOP RIGHT"','"BOTTOM RIGHT"','"BOTTOM LEFT"']) assert.ok(app.includes(corner));
   assert.ok(app.includes("Guided calibration · "));
 });
+
+
+test("guided calibration starts all extrema from sentinels so every corner can be measured", () => {
+  assert.ok(app.includes("minX: 1, maxX: 0, minY: 1, maxY: 0, frames: 0, step: -1"));
+});
