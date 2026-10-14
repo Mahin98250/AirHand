@@ -260,6 +260,26 @@ let showLandmarks = true;
 const stabilizer = new GestureStabilizer(115);
 const cursorFilter = new CursorSmoother(cursorSensitivity);
 const DEFAULT_CURSOR_CALIBRATION = { minX: 0.08, maxX: 0.92, minY: 0.08, maxY: 0.92, calibrated: false };
+const PREFERENCES_KEY = "airhand-preferences-v1";
+function readPreferences() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "null");
+    if (!saved || typeof saved !== "object") return null;
+    return {
+      cursorSensitivity: Number.isFinite(saved.cursorSensitivity) ? clamp(saved.cursorSensitivity, 0.12, 0.55) : 0.22,
+      mirrorCamera: typeof saved.mirrorCamera === "boolean" ? saved.mirrorCamera : true,
+      showLandmarks: typeof saved.showLandmarks === "boolean" ? saved.showLandmarks : true,
+      dwellEnabled: typeof saved.dwellEnabled === "boolean" ? saved.dwellEnabled : false,
+      dwellDurationMs: Number.isFinite(saved.dwellDurationMs) ? Math.round(clamp(saved.dwellDurationMs, 500, 1500) / 50) * 50 : 850,
+      soundEnabled: typeof saved.soundEnabled === "boolean" ? saved.soundEnabled : false,
+      difficulty: ["normal", "fast", "challenge"].includes(saved.difficulty) ? saved.difficulty : "normal"
+    };
+  } catch { return null; }
+}
+function savePreferences() {
+  try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ cursorSensitivity, mirrorCamera, showLandmarks, dwellEnabled, dwellDurationMs, soundEnabled, difficulty: game.difficulty })); }
+  catch { /* Preferences are optional when storage is unavailable or full. */ }
+}
 function loadCursorCalibration() {
   try {
     const saved = JSON.parse(localStorage.getItem("airhand-cursor-calibration") || "null");
@@ -272,6 +292,16 @@ function loadCursorCalibration() {
   return { ...DEFAULT_CURSOR_CALIBRATION };
 }
 let cursorCalibration = loadCursorCalibration();
+const savedPreferences = readPreferences();
+if (savedPreferences) {
+  cursorSensitivity = savedPreferences.cursorSensitivity;
+  cursorFilter.alpha = cursorSensitivity;
+  mirrorCamera = savedPreferences.mirrorCamera;
+  showLandmarks = savedPreferences.showLandmarks;
+  dwellEnabled = savedPreferences.dwellEnabled;
+  dwellDurationMs = savedPreferences.dwellDurationMs;
+  soundEnabled = savedPreferences.soundEnabled;
+}
 let calibrationRun = null;
 let calibrationFeedbackUntil = 0;
 let calibrationFeedbackText = "";
@@ -1051,6 +1081,7 @@ function jump() {
 }
 function setSoundEnabled(enabled) {
   soundEnabled = enabled;
+  savePreferences();
   if (soundEnabled && !audioContext) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (AudioContextClass) audioContext = new AudioContextClass();
@@ -1084,6 +1115,7 @@ function cycleDifficulty() {
   game.difficulty = order[(order.indexOf(game.difficulty) + 1) % order.length];
   $("difficultyToggle").textContent = labels[game.difficulty];
   $("difficultyToggle").setAttribute("aria-pressed", String(game.difficulty === "challenge"));
+  savePreferences();
   showToast("Runner pace: " + game.difficulty + ".");
 }
 function pauseGame(showOverlay = true) {
@@ -1118,13 +1150,28 @@ function showGameOverlay(title, message, button) {
   $("overlay").classList.remove("hidden");
 }
 
+// Restore safe preferences after controls exist. The interaction lock is intentionally never persisted.
+$("sensitivity").value = String(cursorSensitivity);
+$("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%";
+$("mirrorToggle").checked = mirrorCamera;
+video.style.transform = mirrorCamera ? "scaleX(-1)" : "none";
+$("landmarkToggle").checked = showLandmarks;
+$("dwellToggle").checked = dwellEnabled;
+$("dwellValue").textContent = dwellEnabled ? "On · " + dwellDurationMs + " ms" : "Off";
+$("dwellDuration").value = String(dwellDurationMs);
+$("dwellDurationValue").textContent = dwellDurationMs + " ms";
+$("soundToggle").textContent = soundEnabled ? "♫ Sound: on" : "♫ Sound: off";
+$("soundToggle").setAttribute("aria-pressed", String(soundEnabled));
+$("difficultyToggle").textContent = ({ normal: "⚡ Pace: normal", fast: "⚡ Pace: fast", challenge: "🔥 Pace: challenge" })[game.difficulty];
+$("difficultyToggle").setAttribute("aria-pressed", String(game.difficulty === "challenge"));
+
 $("start").addEventListener("click", startCamera);
 $("start2").addEventListener("click", startCamera);
 $("stopCamera").addEventListener("click", stopCamera);
 $("calibrate").addEventListener("click", startCursorCalibration);
 $("soundToggle").addEventListener("click", () => setSoundEnabled(!soundEnabled));
 $("difficultyToggle").addEventListener("click", cycleDifficulty);
-$("landmarkToggle").addEventListener("change", event => { showLandmarks = event.target.checked; });
+$("landmarkToggle").addEventListener("change", event => { showLandmarks = event.target.checked; savePreferences(); });
 $("mirrorToggle").addEventListener("change", event => {
   mirrorCamera = event.target.checked;
   video.style.transform = mirrorCamera ? "scaleX(-1)" : "none";
@@ -1134,20 +1181,23 @@ $("mirrorToggle").addEventListener("change", event => {
   $("calibrate").textContent = "Calibrate cursor";
   $("calibrate").disabled = !cameraActive;
   if (cameraActive) $("gestureConfidence").textContent = "Preview changed — recalibrate for best cursor accuracy";
+  savePreferences();
 });
-$("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; });
+$("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; savePreferences(); });
 $("dwellToggle").addEventListener("change", event => {
   dwellEnabled = event.target.checked;
   resetDwellProgress();
   $("dwellValue").textContent = dwellEnabled ? "On · " + dwellDurationMs + " ms" : "Off";
   $("interactionLockStatus").textContent = interactionsLocked ? "Interactions locked" : (dwellEnabled ? "Dwell ready · pause over a tile" : "Pinch to drag · release to drop");
   showToast(dwellEnabled ? "Dwell click enabled." : "Dwell click disabled.");
+  savePreferences();
 });
 $("dwellDuration").addEventListener("input", event => {
   dwellDurationMs = Number(event.target.value);
   $("dwellDurationValue").textContent = dwellDurationMs + " ms";
   if (dwellEnabled) $("dwellValue").textContent = "On · " + dwellDurationMs + " ms";
   resetDwellProgress();
+  savePreferences();
 });
 $("interactionLock").addEventListener("click", () => {
   interactionsLocked = !interactionsLocked;
@@ -1157,6 +1207,18 @@ $("interactionLock").addEventListener("click", () => {
   button.textContent = interactionsLocked ? "🔒 Interactions locked" : "🔓 Interactions unlocked";
   $("interactionLockStatus").textContent = interactionsLocked ? "Locked · cursor moves, clicks and drag are disabled" : "Unlocked · pinch to drag, dwell optional";
   showToast(interactionsLocked ? "Interactions locked — cursor movement continues." : "Interactions unlocked.");
+});
+$("resetPreferences").addEventListener("click", () => {
+  try { localStorage.removeItem(PREFERENCES_KEY); localStorage.removeItem("airhand-cursor-calibration"); } catch { /* Storage may be unavailable. */ }
+  cursorSensitivity = 0.22; cursorFilter.alpha = cursorSensitivity; mirrorCamera = true; showLandmarks = true;
+  dwellEnabled = false; dwellDurationMs = 850; soundEnabled = false; game.difficulty = "normal";
+  cursorCalibration = { ...DEFAULT_CURSOR_CALIBRATION };
+  $("sensitivity").value = "0.22"; $("sensitivityValue").textContent = "22%";
+  $("mirrorToggle").checked = true; video.style.transform = "scaleX(-1)"; $("landmarkToggle").checked = true;
+  $("dwellToggle").checked = false; $("dwellValue").textContent = "Off"; $("dwellDuration").value = "850"; $("dwellDurationValue").textContent = "850 ms";
+  setSoundEnabled(false); $("difficultyToggle").textContent = "⚡ Pace: normal"; $("difficultyToggle").setAttribute("aria-pressed", "false");
+  $("calibrate").textContent = "Calibrate cursor"; $("calibrate").disabled = !cameraActive; resetDwellProgress(); savePreferences();
+  showToast("Settings reset to defaults.");
 });
 $("action").addEventListener("click", () => {
   if (!cameraActive) return startCamera();
