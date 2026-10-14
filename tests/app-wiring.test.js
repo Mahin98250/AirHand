@@ -19,6 +19,13 @@ test("the browser loads one deferred classic script and bundles local helpers", 
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
 });
 
+test("camera preview follows the source aspect ratio to prevent cropped fingers", () => {
+  assert.ok(app.includes("function fitCameraFrameToVideo()"));
+  assert.ok(app.includes('cameraStage.style.aspectRatio = video.videoWidth + " / " + video.videoHeight'));
+  assert.ok(html.includes("object-fit:contain"));
+  assert.ok(html.includes(".stage.portrait-feed{max-width:420px;margin-inline:auto;max-height:none}"));
+});
+
 test("the page does not statically import the external AI CDN", () => {
   assert.equal(app.includes('import { FilesetResolver'), false);
   assert.ok(app.includes('await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs")'));
