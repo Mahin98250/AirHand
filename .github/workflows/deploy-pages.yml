@@ -40,6 +40,7 @@ jobs:
           test -s sw.js
           test -s pwa.js
           test -s airhand-icon.svg
+          test -s android-guide.html
           grep -Eq 'app\.js\?v=[^"]+' index.html
           grep -Eq 'pwa\.js\?v=[^"]+' index.html
           grep -q 'rel="manifest" href="./manifest.webmanifest"' index.html
@@ -75,7 +76,8 @@ jobs:
           manifest_file="$(mktemp)"
           worker_file="$(mktemp)"
           pwa_file="$(mktemp)"
-          trap 'rm -f "$html_file" "$js_file" "$manifest_file" "$worker_file" "$pwa_file"' EXIT
+          guide_file="$(mktemp)"
+          trap 'rm -f "$html_file" "$js_file" "$manifest_file" "$worker_file" "$pwa_file" "$guide_file"' EXIT
 
           # Allow Pages/CDN propagation a short window, but fail loudly if still unavailable.
           fetched=0
@@ -115,11 +117,14 @@ jobs:
           fi
           curl --fail --silent --show-error --location "${SITE_URL%/}/manifest.webmanifest" -o "$manifest_file"
           curl --fail --silent --show-error --location "${SITE_URL%/}/sw.js" -o "$worker_file"
-          curl --fail --silent --show-error --location "${SITE_URL%/}/pwa.js?v=airhand-pwa-1" -o "$pwa_file"
+          curl --fail --silent --show-error --location "${SITE_URL%/}/pwa.js?v=airhand-pwa-2" -o "$pwa_file"
+          curl --fail --silent --show-error --location "${SITE_URL%/}/android-guide.html" -o "$guide_file"
+          grep -q 'Android setup & user guide' "$guide_file"
           cmp -s manifest.webmanifest "$manifest_file"
           cmp -s sw.js "$worker_file"
           if ! cmp -s pwa.js "$pwa_file"; then
             echo "::error::Live pwa.js does not match the committed file."
             exit 1
           fi
-          echo "PASS: live HTML, app.js, PWA manifest, service worker and pwa.js match the committed files."
+          cmp -s android-guide.html "$guide_file"
+          echo "PASS: live HTML, app.js, PWA manifest, service worker, pwa.js and Android guide match the committed files."
