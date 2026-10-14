@@ -85,3 +85,13 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 - Storage errors are handled gracefully; settings remain usable when browser storage is unavailable.
 
 **Still required:** manually verify persistence and reset behavior in the target browser and validate all hand-controlled interactions with a physical camera. Browser automation does not prove real-world gesture accuracy.
+
+
+## Phase 5 — Reliability and accessibility
+
+- Camera startup failures now explain common permission-denied, missing-device, busy-camera, unsupported-constraint, and interrupted-start cases with recovery guidance.
+- If the active camera track ends unexpectedly, AirHand stops stale tracking state and tells the user how to reconnect and restart.
+- Camera status and recovery messages use polite live regions; the camera preview and game canvas have accessible descriptions, and interactive controls have visible keyboard focus.
+- Automated regression coverage checks camera recovery wiring and the new accessibility hooks.
+
+**Still requires physical validation:** revoke camera permission and retry on Android/desktop, unplug or switch cameras where supported, background and restore the mobile browser, and test keyboard navigation with a screen reader. Automated tests do not establish device-specific camera behavior or full accessibility conformance.
