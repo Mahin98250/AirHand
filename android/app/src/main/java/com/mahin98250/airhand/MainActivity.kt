@@ -360,7 +360,7 @@ class MainActivity : AppCompatActivity() {
         val gestures = listOf(
             "☝" to ("Point" to "Move cursor"),
             "🤏" to ("Pinch" to "Tap / hold"),
-            "✋" to ("Open palm" to "Scroll"),
+            "✋" to ("Open palm" to "Scroll / swipe"),
             "✌" to ("Peace sign" to "Go back"),
             "👍" to ("Thumbs-up" to "Home"),
             "✊" to ("Fist" to "Recent apps")
@@ -390,11 +390,18 @@ class MainActivity : AppCompatActivity() {
         }
         gestureContent.addView(gestureGrid)
         gestureContent.addView(text(
-            "A brief pinch and release taps. Hold a steady pinch for a long press. Moving while pinching cancels the tap. Navigation poses trigger once until released.",
+            "A brief pinch and release taps. Hold a steady pinch for a long press. Move an open palm mostly up/down to scroll or mostly left/right to swipe. Moving while pinching cancels the tap. Navigation poses trigger once until released.",
             11f, muted
         ).apply { setPadding(dp(2), dp(10), dp(2), 0) })
         gestureCard.addView(gestureContent)
         content.addView(gestureCard)
+        content.addView(button("Open complete user manual") {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://mahin98250.github.io/AirHand/android-guide.html")))
+            } catch (_: Exception) {
+                status.text = "Could not open the manual. Visit github.com/Mahin98250/AirHand and open android-guide.html."
+            }
+        })
 
         // Safety and emergency stop
         val safetyCard = card().apply {
