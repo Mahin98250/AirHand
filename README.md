@@ -1,4 +1,4 @@
-# AirHand — AI Hand Gesture Controller
+# AirHand — Hand Gesture Controller
 
 AirHand is a mobile-friendly browser app that turns webcam hand movements into a virtual cursor and an endless-runner game.
 
@@ -20,7 +20,14 @@ AirHand is a mobile-friendly browser app that turns webcam hand movements into a
 2. For example, run `python -m http.server 8000` and open `http://localhost:8000`.
 3. Press **Enable camera** and grant camera permission.
 
-Camera access requires HTTPS or localhost. MediaPipe's JavaScript/WASM runtime and models are loaded from public CDNs, so internet access is required for the first launch. AirHand is not yet an offline-first PWA.
+Camera access requires HTTPS or localhost. MediaPipe's JavaScript/WASM runtime and hand models are loaded from public CDNs, so internet access is required to start gesture recognition. The installable PWA caches the app shell so the interface can reopen offline after one successful online visit; **camera-based gesture recognition is not fully offline** because its runtime and model files are not precached.
+
+## Install AirHand
+
+- **Android / desktop Chromium:** open the GitHub Pages site over HTTPS and choose **Install app** when the button appears. You can also use the browser menu's install option.
+- **iPhone / iPad:** open the site in Safari, tap **Share**, then **Add to Home Screen**.
+- The service worker caches the HTML, local JavaScript, manifest and icon. It does not cache camera frames or third-party model files.
+- The app remains a browser-based gesture playground. Installing the PWA does not grant Android system-wide cursor control or replace the separate native AirHand Mobile APK.
 
 ## Gesture controls
 
