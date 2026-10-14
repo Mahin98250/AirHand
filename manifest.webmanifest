@@ -1,24 +1,27 @@
 {
   "name": "AirHand — Hand Gesture Controller",
   "short_name": "AirHand",
-  "description": "A hands-free cursor and gesture playground that runs in your browser.",
+  "description": "Control the AirHand browser playground with hand gestures and follow the Android setup guide.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f7f9fc",
-  "theme_color": "#f7f9fc",
-  "categories": [
-    "utilities",
-    "productivity"
-  ],
+  "theme_color": "#193b96",
+  "categories": ["utilities", "productivity"],
   "icons": [
     {
       "src": "./airhand-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "./airhand-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }
