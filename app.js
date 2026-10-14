@@ -12,7 +12,7 @@ const cameraStage = $("stage");
 let landmarker = null;
 let mediaStream = null;
 let cameraActive = false;
-let animationFrame = 0;
+let trackingFrame = 0;\nlet gameFrameRequest = 0;
 let lastVideoTime = -1;
 let fpsFrames = 0;
 let fpsWindowStart = 0;
@@ -55,11 +55,11 @@ function updateCameraUI(active) {
   $("status").textContent = active ? "Camera on" : "Camera off";
   $("stage").classList.toggle("on", active);
   $("placeholder").classList.toggle("hidden", active);
-  $("action").disabled = !active;
+  $("action").disabled = !active;\n  $("stopCamera").disabled = !active;
   $("action").textContent = active
     ? (currentMode === "cursor" ? "Re-center cursor →" : "Restart runner →")
     : "Enable camera →";
-  $("start").textContent = active ? "◉ Camera enabled" : "◉  Enable camera";
+  $("start").textContent = active ? "◉ Camera enabled" : "◉  Enable camera";\n  if ($("stopCamera")) $("stopCamera").disabled = !active;
   if (active) {
     $("start").disabled = false;
     setReady("Hand tracking is live", "Move your hand inside the camera frame.");
@@ -121,7 +121,7 @@ async function startCamera() {
     fpsWindowStart = performance.now();
     resizeCanvases();
     updateCameraUI(true);
-    animationFrame = requestAnimationFrame(trackFrame);
+    trackingFrame = requestAnimationFrame(trackFrame);
     showToast("Camera ready — show your hand.");
   } catch (error) {
     console.error("AirHand camera startup failed:", error);
@@ -146,7 +146,7 @@ function stopMediaTracks() {
 }
 function stopCamera() {
   cameraActive = false;
-  cancelAnimationFrame(animationFrame);
+  cancelAnimationFrame(trackingFrame);\n  cancelAnimationFrame(gameFrameRequest);
   stopMediaTracks();
   if (landmarker) { landmarker.close(); landmarker = null; }
   video.srcObject = null;
@@ -388,11 +388,11 @@ function startGame() {
   lastGameFrame = 0;
   $("overlay").classList.add("hidden");
   renderGame();
-  animationFrame = requestAnimationFrame(gameFrame);
+  gameFrameRequest = requestAnimationFrame(gameFrame);
 }
 function gameFrame(now) {
   if (!game.playing || game.paused || currentMode !== "game") return;
-  animationFrame = requestAnimationFrame(gameFrame);
+  gameFrameRequest = requestAnimationFrame(gameFrame);
   const dt = Math.min(Math.max((now - (lastGameFrame || now)) / 1000, 0), .035);
   lastGameFrame = now;
   const width = gameCanvas.clientWidth;
@@ -460,7 +460,7 @@ function showGameOverlay(title, message, button) {
 
 $("start").addEventListener("click", startCamera);
 $("start2").addEventListener("click", startCamera);
-$("action").addEventListener("click", () => {
+$("stopCamera").addEventListener("click", stopCamera);\n$("landmarkToggle").addEventListener("change", event => { showLandmarks = event.target.checked; });\n$("mirrorToggle").addEventListener("change", event => { mirrorCamera = event.target.checked; video.style.transform = mirrorCamera ? "scaleX(-1)" : "none"; });\n$("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; });\n$("action").addEventListener("click", () => {
   if (!cameraActive) return startCamera();
   if (currentMode === "cursor") {
     cursorFilter.reset(.5, .5);
