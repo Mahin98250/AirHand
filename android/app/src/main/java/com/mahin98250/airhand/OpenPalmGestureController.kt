@@ -43,7 +43,8 @@ internal class OpenPalmGestureController(
 
         val deltaX = wristX - oldX
         val deltaY = wristY - oldY
-        if (nowMs < lastActionAtMs || nowMs - lastActionAtMs < cooldownMs) return null
+        if (lastActionAtMs != Long.MIN_VALUE &&
+            (nowMs < lastActionAtMs || nowMs - lastActionAtMs < cooldownMs)) return null
 
         val action = when {
             abs(deltaX) >= horizontalThreshold && abs(deltaX) > abs(deltaY) ->
