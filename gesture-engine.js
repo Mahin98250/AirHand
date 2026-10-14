@@ -40,7 +40,7 @@ function thumbIsExtended(landmarks, palmScale) {
  * Recognize a gesture from MediaPipe's 21 normalized hand landmarks.
  * previousPinch enables a small hysteresis band to avoid pinch flicker.
  */
-export function detectGesture(landmarks, previousPinch = false) {
+export function detectGesture(landmarks, previousPinch = false, modelCategory = null, modelScore = 0) {
   if (!validLandmarks(landmarks)) {
     return { gesture: "None", fingers: null, pinchRatio: Infinity, palmScale: 0 };
   }
@@ -57,7 +57,23 @@ export function detectGesture(landmarks, previousPinch = false) {
   const pinchThreshold = previousPinch ? 0.39 : 0.29;
 
   if (pinchRatio < pinchThreshold) {
-    return { gesture: "Pinch", fingers, pinchRatio, palmScale, thumbExtended };
+    return { gesture: "Pinch", fingers, pinchRatio, palmScale, thumbExtended, source: "geometry" };
+  }
+
+  // Prefer MediaPipe's trained classifier for supported canned gestures.
+  // Keep a geometric fallback for unclear poses and the custom pinch gesture.
+  const modelMapping = {
+    Pointing_Up: "Point",
+    Victory: "Peace",
+    Thumb_Up: "ThumbsUp",
+    Open_Palm: "OpenPalm",
+    Closed_Fist: "Fist"
+  };
+  if (modelMapping[modelCategory] && modelScore >= 0.52) {
+    return {
+      gesture: modelMapping[modelCategory], fingers, pinchRatio, palmScale,
+      thumbExtended, source: "model", confidence: modelScore
+    };
   }
 
   const { index, middle, ring, pinky } = fingers;
