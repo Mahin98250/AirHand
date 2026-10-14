@@ -12,6 +12,12 @@ test("every statically referenced UI ID exists in index.html", () => {
   assert.deepEqual(missing, [], "Missing HTML IDs: " + missing.join(", "));
 });
 
+test("the external AI runtime loads only after the page controls are wired", () => {
+  assert.doesNotMatch(app.split("\\n")[0], /https:\\/\\/cdn\\.jsdelivr\\.net/);
+  assert.match(app, /await import\\("https:\\/\\/cdn\\.jsdelivr\\.net\\/@mediapipe\\/tasks-vision/);
+  assert.match(app, /Camera access requires HTTPS or localhost/);
+});
+
 test("the app uses the Gesture Recognizer and local pinch fallback", () => {
   assert.match(app, /GestureRecognizer\.createFromOptions/);
   assert.match(app, /recognizeForVideo/);
