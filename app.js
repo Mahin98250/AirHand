@@ -159,6 +159,7 @@ async function startCamera() {
     console.error("AirHand camera startup failed:", error);
     stopMediaTracks();
     if (gestureRecognizer) { gestureRecognizer.close(); gestureRecognizer = null; }
+    geometryOnlyFallback = false;
     video.srcObject = null;
     updateCameraUI(false);
     setReady("Camera couldn't start", error?.message || "Check camera permission, then try again.");
@@ -179,9 +180,10 @@ function stopMediaTracks() {
 function stopCamera() {
   cameraActive = false;
   cancelAnimationFrame(trackingFrame);
-  cancelAnimationFrame(gameFrameRequest);
+  // Keep the runner alive: it also supports keyboard and pointer controls without a camera.
   stopMediaTracks();
   if (gestureRecognizer) { gestureRecognizer.close(); gestureRecognizer = null; }
+  geometryOnlyFallback = false;
   video.srcObject = null;
   trackingContext.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
   stabilizer.reset();
