@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#193b96">
+<meta name="description" content="The official AirHand Android setup guide: download the APK, install safely, enable permissions and use hand gestures and voice typing.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./airhand-icon.svg" type="image/svg+xml">
+<title>AirHand Android — Setup & User Guide</title>
+<style>
+:root{color-scheme:light;--ink:#17243a;--muted:#66758d;--blue:#2868ed;--line:#e1e8f2;--bg:#f4f7fc;--card:#fff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{max-width:900px;padding:20px;margin:auto}.top{display:flex;align-items:center;gap:12px;margin:8px 0 32px}.mark{width:48px;height:48px;border-radius:14px;box-shadow:0 6px 20px #193b9624}.brand{font-size:20px;font-weight:800;letter-spacing:-.5px}.sub{font-size:12px;color:var(--muted)}.top a{margin-left:auto;color:var(--blue);text-decoration:none;font-weight:700;font-size:14px}.hero{background:linear-gradient(135deg,#183b96,#2868ed 60%,#43baff);color:white;border-radius:24px;padding:28px;box-shadow:0 16px 40px #193b9625}.eyebrow{font-size:11px;letter-spacing:1.8px;text-transform:uppercase;font-weight:800;opacity:.8}.hero h1{font-size:clamp(30px,7vw,46px);line-height:1.1;letter-spacing:-1.4px;margin:12px 0}.hero p{max-width:650px;color:#e4efff}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.btn{display:inline-block;text-decoration:none;font-weight:800;font-size:14px;border-radius:12px;padding:12px 16px;background:white;color:#1945ad}.btn.alt{background:#ffffff1c;color:white;border:1px solid #ffffff70}.note{margin:18px 0 0;font-size:13px;color:#f1f5ff}.section{margin:28px 0}.section h2{font-size:24px;letter-spacing:-.6px;margin:0 0 12px}.section>p{color:var(--muted)}.steps{display:grid;gap:12px}.step,.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:17px;box-shadow:0 5px 20px #1a315008}.step{display:grid;grid-template-columns:36px 1fr;gap:12px}.num{width:34px;height:34px;border-radius:11px;background:#eaf1ff;color:#2459cf;font-weight:900;display:grid;place-items:center}.step h3,.card h3{font-size:16px;margin:0 0 5px}.step p,.card p{font-size:14px;color:var(--muted);margin:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pill{display:inline-block;background:#eaf1ff;color:#2459cf;border-radius:8px;padding:3px 8px;font-size:12px;font-weight:800;margin:0 5px 5px 0}.warning{border-left:4px solid #edab38;background:#fff8e9;padding:15px 17px;border-radius:12px;color:#654c20;font-size:14px}.danger{border-left:4px solid #e56a6a;background:#fff1f1;padding:15px 17px;border-radius:12px;color:#6d2929;font-size:14px}a{color:var(--blue)}ol,ul{padding-left:22px}li{margin:5px 0}code{font-size:.92em;background:#eef2f8;padding:2px 5px;border-radius:5px}footer{border-top:1px solid var(--line);margin-top:35px;padding:20px 0;color:var(--muted);font-size:12px}@media(max-width:620px){.wrap{padding:14px}.hero{padding:22px;border-radius:19px}.grid{grid-template-columns:1fr}.top{margin-bottom:20px}.section h2{font-size:21px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<header class="top"><img class="mark" src="./airhand-icon.svg" alt=""><div><div class="brand">AirHand</div><div class="sub">Android setup & user guide</div></div><a href="./">Open web app ↗</a></header>
+<section class="hero">
+<div class="eyebrow">Start here</div>
+<h1>Use AirHand on your Android phone.</h1>
+<p>This guide explains the two AirHand options, how to install them, which permissions are needed, and how to start controlling the phone with hand gestures.</p>
+<div class="actions"><a class="btn" href="https://github.com/Mahin98250/AirHand/actions/runs/38615582949">Get Android APK</a><a class="btn alt" href="./">Open browser version</a></div>
+<p class="note">APK download note: sign in to GitHub first, then open the successful build and select <b>AirHand-Mobile-debug-APK</b> under Artifacts. The ZIP link itself may show “Requires authentication” if opened outside a signed-in GitHub session.</p>
+</section>
+<section class="section">
+<h2>1. Choose the version you need</h2>
+<div class="grid">
+<div class="card"><h3>Browser app / PWA</h3><p>Runs inside its own page. Good for trying the camera gesture playground, cursor calibration and games. It cannot tap or navigate other Android apps.</p></div>
+<div class="card"><h3>AirHand Mobile APK</h3><p>Native Android prototype for a floating cursor and system-wide gestures where Android allows them. Requires Accessibility and display-over-other-apps permission.</p></div>
+</div>
+</section>
+<section class="section">
+<h2>2. Download and install the Android APK</h2>
+<div class="steps">
+<div class="step"><div class="num">1</div><div><h3>Open the build page</h3><p>Tap <a href="https://github.com/Mahin98250/AirHand/actions/runs/38615582949">this Android build</a>. If GitHub asks, sign in to your GitHub account. The build must say <b>Success</b>.</p></div></div>
+<div class="step"><div class="num">2</div><div><h3>Download the artifact</h3><p>Scroll to <b>Artifacts</b>, tap <b>AirHand-Mobile-debug-APK</b>, and download the ZIP. If Artifacts is missing, check you opened the successful run, not a queued or failed one.</p></div></div>
+<div class="step"><div class="num">3</div><div><h3>Extract the ZIP</h3><p>Open Samsung My Files or your file manager, go to Downloads, tap the ZIP and extract it. Find <code>app-debug.apk</code>.</p></div></div>
+<div class="step"><div class="num">4</div><div><h3>Allow this installation</h3><p>Tap the APK. Android may ask you to allow your browser or file manager to install unknown apps. Only allow it for the app you used to download this file, then return and install. You can switch this permission off again afterwards.</p></div></div>
+<div class="step"><div class="num">5</div><div><h3>Open AirHand</h3><p>Launch AirHand from your app drawer. If Android blocks the installer, check that you downloaded the APK from the official <a href="https://github.com/Mahin98250/AirHand">Mahin98250/AirHand repository</a>.</p></div></div>
+</div>
+</section>
+<section class="section">
+<h2>3. Enable the permissions</h2>
+<div class="steps">
+<div class="step"><div class="num">1</div><div><h3>Camera</h3><p>Tap the camera preview/start button and allow camera access. Keep your hand visible, well lit and not too close to the lens.</p></div></div>
+<div class="step"><div class="num">2</div><div><h3>Accessibility — AirHand Gesture Actions</h3><p>From AirHand, open Accessibility settings. Find <b>AirHand Gesture Actions</b> under installed/downloaded apps and turn it on after reading Android's warning. This is required for supported system-wide gestures.</p></div></div>
+<div class="step"><div class="num">3</div><div><h3>Display over other apps</h3><p>Allow AirHand to display over other apps so the floating cursor can be shown. Return to AirHand afterwards.</p></div></div>
+<div class="step"><div class="num">4</div><div><h3>Notifications</h3><p>Allow notifications when requested. The ongoing notification provides Pause/Resume and Stop controls while system-wide mode runs.</p></div></div>
+<div class="step"><div class="num">5</div><div><h3>Keyboard and voice typing (optional)</h3><p>Open Android's input-method settings from AirHand, enable <b>AirHand Gesture Keyboard</b>, then choose it as the active keyboard. Grant microphone permission only if you want voice entry. Speech availability and offline behavior depend on your phone's speech service.</p></div></div>
+</div>
+</section>
+<section class="section">
+<h2>4. Calibrate and start controlling</h2>
+<div class="steps">
+<div class="step"><div class="num">1</div><div><h3>Calibrate for your hand</h3><p>Start the camera preview. Tap <b>Calibrate cursor range · 5 seconds</b>. Move your index fingertip slowly through the widest comfortable area in both directions. If the range is rejected, repeat with a larger horizontal and vertical sweep.</p></div></div>
+<div class="step"><div class="num">2</div><div><h3>Start system-wide control</h3><p>Tap <b>Start system-wide gesture control</b> and confirm the explanation. The camera remains active while the foreground service is running.</p></div></div>
+<div class="step"><div class="num">3</div><div><h3>Try one gesture at a time</h3><p>Test in a harmless app such as a notes page first. Move slowly and deliberately, wait for each gesture to finish, and re-form a held pose before using it again.</p></div></div>
+</div>
+<div class="card" style="margin-top:12px"><h3>Gesture quick reference</h3><p><span class="pill">Point</span> Move cursor <span class="pill">Brief pinch + release</span> Tap <span class="pill">Hold steady pinch</span> Long press <span class="pill">Open palm up/down</span> Scroll <span class="pill">Peace sign</span> Back <span class="pill">Thumbs-up</span> Home <span class="pill">Fist</span> Recent apps</p></div>
+</section>
+<section class="section">
+<h2>5. Pause, stop and fix common issues</h2>
+<div class="grid">
+<div class="card"><h3>Pause immediately</h3><p>Use Pause in the persistent AirHand notification to disable gesture actions. Resume only when ready.</p></div>
+<div class="card"><h3>Stop completely</h3><p>Tap Stop in the notification or use AirHand's Emergency stop to stop tracking and release resources.</p></div>
+<div class="card"><h3>Cursor doesn't reach edges</h3><p>Stop the system-wide session, return to the camera preview, repeat calibration with a wider comfortable range, then restart the service.</p></div>
+<div class="card"><h3>No cursor or gestures</h3><p>Check camera permission, Accessibility, overlay permission and notification. Keep the hand in frame, improve lighting, then stop and restart tracking.</p></div>
+<div class="card"><h3>APK ZIP says “Requires authentication”</h3><p>That is GitHub protecting the Actions artifact endpoint. Sign in at github.com in your browser, revisit the build page and download the artifact from its Artifacts section. Do not use the raw <code>api.github.com/.../zip</code> address as a public direct-download link.</p></div>
+<div class="card"><h3>Camera or speech doesn't work offline</h3><p>The Android hand model is packaged in the APK, but voice recognition depends on the selected speech provider. The browser PWA needs internet to fetch its hand-tracking runtime/model on first use.</p></div>
+</div>
+</section>
+<section class="section">
+<div class="warning"><b>Prototype notice:</b> behavior differs by phone, Android version and app. Secure screens, payment/banking apps and restricted surfaces may block control. Physical-device reliability is still being tested.</div>
+<div class="danger" style="margin-top:12px"><b>Safety:</b> do not rely on gesture control for payments, passwords, emergency calls or other safety-critical actions. Check any dictated text before sending it; AirHand does not automatically send messages.</div>
+</section>
+<footer>AirHand · Android guide · <a href="https://github.com/Mahin98250/AirHand">Source repository</a> · <a href="./">Return to AirHand</a></footer>
+</main>
+<script>
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+}
+</script>
+</body>
+</html>
