@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const steering = readFileSync(new URL("../steering-engine.js", import.meta.url), "utf8");
 const htmlIds = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 const referencedIds = new Set([...app.matchAll(/\$\("([^"]+)"\)/g)].map(match => match[1]));
 const allHtmlIds = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
@@ -203,7 +204,7 @@ test("Air Drive touch controls are present, accessible, and release steering or 
 
 
 test("Air Drive receives the corrected steering direction and polished HUD styling", () => {
-  assert.ok(app.includes("const target = clamp(-corrected / this.maxTurnRadians, -1, 1)"));
+  assert.ok(steering.includes("const target = clamp(-corrected / this.maxTurnRadians, -1, 1)"));
   assert.ok(html.includes("app.js?v=airhand-20261014-24"));
   assert.ok(html.includes(".drive-hud b{font-variant-numeric:tabular-nums"));
   assert.ok(html.includes("prefers-reduced-motion:reduce"));
