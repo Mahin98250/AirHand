@@ -43,8 +43,8 @@ jobs:
           test -s android/app/src/main/java/com/mahin98250/airhand/HandLandmarkerAnalyzer.kt
       - name: Download and verify pinned hand model
         run: bash android/download-hand-model.sh
-      - name: Build debug APK
-        run: gradle --no-daemon -p android :app:assembleDebug
+      - name: Run safety tests and build debug APK
+        run: gradle --no-daemon -p android :app:testDebugUnitTest :app:assembleDebug
       - name: Inspect APK contents
         shell: bash
         run: |
