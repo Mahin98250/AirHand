@@ -9,7 +9,7 @@ This directory is the native Android track. The existing browser-based AirHand a
 - Kotlin gesture geometry/stabilization adapted from the existing browser engine: Point, Pinch, Peace, OpenPalm, ThumbsUp, Fist and Unclear labels.
 - Camera analysis copies padded RGBA planes safely, corrects frame rotation and front-camera mirroring, closes CameraX buffers promptly, and bounds inference to one in-flight frame.
 - Foreground camera service for explicit system-wide mode; persistent notification with a Stop action; floating cursor overlay; adaptive screen-space cursor smoothing.
-- Guarded pinch-to-tap integration through Android Accessibility. Open-palm vertical movement requests scroll; a Peace sign held for 900 ms can request Back. These gesture actions are prototypes and need physical-device false-trigger testing.
+- Guarded pinch-to-tap integration through Android Accessibility. Open-palm vertical movement requests scroll; a Peace sign held for 1 second requests Back, a thumbs-up held for 1.35 seconds requests Home, and a fist held for 1.5 seconds requests Recent apps. Long-hold actions fire once per pose; release and re-form before they can fire again. These mappings still need physical-device false-trigger testing.
 - User-selectable Android input method named AirHand Gesture Keyboard, with QWERTY and symbols, shift, delete, space, enter, and opt-in voice entry that commits recognized speech into the currently focused text field.
 - Explicit entry points for camera, microphone, notification, overlay, and Accessibility settings. Emergency stop disables action dispatch and stops camera tracking.
 - No app backend is used for camera frames or landmark inference. The voice recognizer is the device-selected Android speech-recognition service; availability and whether it processes speech offline depend on that provider.
@@ -18,7 +18,7 @@ This directory is the native Android track. The existing browser-based AirHand a
 
 This is an early prototype, not a polished or fully validated hands-free product. The APK can be built with these components, but cursor alignment, pinch tap precision, scroll behavior, camera background restrictions, device-specific performance, IME voice recognition, and app compatibility still need testing on actual phones. We have not established reliable use in every app, and Android secure screens or restricted apps can block automation.
 
-The built-in Accessibility service does not inspect window text or search arbitrary UI content. It only exposes the narrow set of explicitly requested gestures supported by this implementation. AirHand does not automatically send messages and must not be used to automate payments, passwords, emergency calls, or safety-critical actions.
+The built-in Accessibility service does not inspect window text or search arbitrary UI content. It only exposes a narrow, explicit set of taps, scrolling and system navigation gestures. AirHand does not automatically send messages. Review chat text before sending, and do not use gesture automation for payments, passwords, emergency calls or other safety-critical actions.
 
 ## Build and download the debug APK
 
@@ -63,7 +63,7 @@ The downloaded model is ignored by Git so a large binary is not accidentally com
 ## Next milestones
 
 1. Validate rotation/mirroring and cursor mapping across different phone models and orientations.
-2. Add configurable pointer calibration and a pause/drag-lock gesture with better false-trigger prevention.
+2. Add configurable pointer calibration, explicit pause/drag-lock, and a cancellable long-press/drag interaction with stronger false-trigger prevention.
 3. Test gesture keyboard insertion across chats, search fields, browsers and editors; add language/layout options.
 4. Run physical-device tests for latency, false clicks, missed gestures, battery/thermal load, interruption recovery, and accessible stop controls.
 5. Build and sign a release APK only after those tests, with a user-controlled key and documented release process.
