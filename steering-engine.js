@@ -1,5 +1,12 @@
 
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+function distance2D(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function validLandmarks(landmarks) {
+  return Array.isArray(landmarks) && landmarks.length >= 21 &&
+    landmarks.every(point => Number.isFinite(point?.x) && Number.isFinite(point?.y));
+}
+
 /**
  * Two-hand air-steering controller. Uses the angle between the wrists, relative
  * to a user-calibrated neutral pose, and smooths the result to reduce jitter.
