@@ -11,8 +11,8 @@ android {
         applicationId 'com.mahin98250.airhand'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '0.3.0'
+        versionCode 4
+        versionName '0.4.0'
     }
 
     buildTypes {
@@ -34,6 +34,7 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.activity:activity-ktx:1.9.3'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-service:2.8.7'
 
     def cameraXVersion = '1.4.1'
     implementation "androidx.camera:camera-core:$cameraXVersion"
@@ -41,6 +42,5 @@ dependencies {
     implementation "androidx.camera:camera-lifecycle:$cameraXVersion"
     implementation "androidx.camera:camera-view:$cameraXVersion"
 
-    // Pinned version: API compatible with the checked-in Hand Landmarker integration.
     implementation 'com.google.mediapipe:tasks-vision:0.10.35'
 }
