@@ -39,6 +39,15 @@ test("pinch thresholds are normalized to palm size and have hysteresis", () => {
   assert.equal(detectGesture(hand, false).gesture, "Pinch");
 });
 
+test("MediaPipe model labels are preferred when classifier confidence is sufficient", () => {
+  const hand = baseHand();
+  assert.equal(detectGesture(hand, false, "Victory", 0.91).gesture, "Peace");
+  assert.equal(detectGesture(hand, false, "Thumb_Up", 0.88).gesture, "ThumbsUp");
+  assert.notEqual(detectGesture(hand, false, "Victory", 0.2).gesture, "Peace");
+  hand[8] = { x: 0.52, y: 0.45 };
+  assert.equal(detectGesture(hand, false, "Open_Palm", 0.99).gesture, "Pinch");
+});
+
 test("gesture stabilizer waits for a consistent gesture and clears on hand loss", () => {
   const filter = new GestureStabilizer(100);
   assert.equal(filter.update("Point", 1000), "None");
