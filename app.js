@@ -502,10 +502,12 @@ function trackFrame(now) {
     drawLandmarks(landmarks, width, height);
     const category = geometryOnlyFallback ? null : selectBestModelGesture(result.gestures?.[0] || []);
     const raw = detectGesture(landmarks, stablePinch, category?.categoryName || null, category?.score || 0);
-    const frameGuidance = getHandFrameGuidance(landmarks);
-    $("gestureConfidence").textContent = frameGuidance || (raw.source === "model"
-      ? "Model confidence " + Math.round((raw.confidence || 0) * 100) + "%"
-      : raw.gesture === "Pinch" ? "Pinch distance normalized to palm size" : "Landmark geometry fallback");
+    if (!wasCalibrating) {
+      const frameGuidance = getHandFrameGuidance(landmarks);
+      $("gestureConfidence").textContent = frameGuidance || (raw.source === "model"
+        ? "Model confidence " + Math.round((raw.confidence || 0) * 100) + "%"
+        : raw.gesture === "Pinch" ? "Pinch distance normalized to palm size" : "Landmark geometry fallback");
+    }
     const stable = stabilizer.update(raw.gesture, now);
     $("gesture").textContent = labels[stable] || labels.Unclear;
     updateCursor(landmarks[8]);
@@ -955,7 +957,16 @@ $("calibrate").addEventListener("click", startCursorCalibration);
 $("soundToggle").addEventListener("click", () => setSoundEnabled(!soundEnabled));
 $("difficultyToggle").addEventListener("click", cycleDifficulty);
 $("landmarkToggle").addEventListener("change", event => { showLandmarks = event.target.checked; });
-$("mirrorToggle").addEventListener("change", event => { mirrorCamera = event.target.checked; video.style.transform = mirrorCamera ? "scaleX(-1)" : "none"; });
+$("mirrorToggle").addEventListener("change", event => {
+  mirrorCamera = event.target.checked;
+  video.style.transform = mirrorCamera ? "scaleX(-1)" : "none";
+  calibrationRun = null;
+  cursorCalibration = { ...DEFAULT_CURSOR_CALIBRATION };
+  try { localStorage.removeItem("airhand-cursor-calibration"); } catch { /* optional preference */ }
+  $("calibrate").textContent = "Calibrate cursor";
+  $("calibrate").disabled = !cameraActive;
+  if (cameraActive) $("gestureConfidence").textContent = "Preview changed — recalibrate for best cursor accuracy";
+});
 $("sensitivity").addEventListener("input", event => { cursorSensitivity = Number(event.target.value); cursorFilter.alpha = cursorSensitivity; $("sensitivityValue").textContent = Math.round(cursorSensitivity * 100) + "%"; });
 $("action").addEventListener("click", () => {
   if (!cameraActive) return startCamera();
