@@ -66,3 +66,12 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 - Cursor response remains adjustable. Runner controls remain separate from cursor drag/dwell behavior.
 
 **Still requires physical validation:** camera-based target following, drag start/release reliability, dwell timing with natural hand jitter, and calibration behavior across lighting, camera angles, and different hand sizes. Automated tests and simulated browser checks do not establish real-world accuracy. AirHand is not claimed to work fully offline.
+
+
+## Phase 3 — Safe interaction controls
+
+- **Interaction lock:** the cursor can keep moving while pinch, drag and dwell selections are disabled. Unlock explicitly to re-enable them.
+- **Adjustable dwell click:** choose 500–1500 ms in 50 ms increments; default is 850 ms. Changing the delay resets the current dwell timer.
+- **Drag feedback and cleanup:** the potential drop target is highlighted; completion and cancellation are reported. Mode changes and camera stop cancel an active drag so a stale drag cannot persist.
+
+**Physical checks still required:** test the lock with real gestures, dwell timing under natural jitter, and drag/drop across different lighting, hand sizes and camera positions. Browser tests validate software behavior only; no claim of physical accuracy or fully offline operation is made.
