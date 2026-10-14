@@ -238,6 +238,8 @@ let lastVideoTime = -1;
 let lastHandSeenAt = 0;
 let lastHandLandmarks = null;
 const TRACKING_LOSS_GRACE_MS = 180;
+const INFERENCE_ERROR_GRACE_MS = 180;
+let inferenceErrorSince = 0;
 let fpsFrames = 0;
 let fpsWindowStart = 0;
 let currentMode = "cursor";
@@ -512,6 +514,7 @@ function stopCamera() {
   stabilizer.reset();
   lastHandSeenAt = 0;
   lastHandLandmarks = null;
+  inferenceErrorSince = 0;
   calibrationRun = null;
   $("calibrate").disabled = true;
   $("calibrate").textContent = cursorCalibration.calibrated ? "Recalibrate" : "Calibrate cursor";
@@ -581,8 +584,24 @@ function trackFrame(now) {
     result = geometryOnlyFallback
       ? gestureRecognizer.detectForVideo(video, now)
       : gestureRecognizer.recognizeForVideo(video, now);
+    inferenceErrorSince = 0;
   } catch (error) {
     console.warn("Skipping a frame after inference error:", error);
+    if (!inferenceErrorSince) inferenceErrorSince = now;
+    if (now - inferenceErrorSince >= INFERENCE_ERROR_GRACE_MS) {
+      // A broken inference loop must not leave a pinch/drag latched forever.
+      // Tracking failure is not an intentional release, so cancel instead of dropping at stale coordinates.
+      lastHandLandmarks = null;
+      stabilizer.reset();
+      stablePinch = false;
+      if (lastStableGesture !== "None") {
+        cancelVirtualDrag("Tracking interrupted");
+        resetDwellProgress();
+        lastStableGesture = "None";
+      }
+      $("gesture").textContent = "Tracking interrupted";
+      $("gestureConfidence").textContent = "Hand inference failed · retrying";
+    }
     return;
   }
   const width = cameraStage.clientWidth;
@@ -640,7 +659,10 @@ function trackFrame(now) {
     stabilizer.reset();
     stablePinch = false;
     if (lastStableGesture !== "None") {
-      handleStableGesture("None", lastStableGesture, now, null);
+      // Losing the hand is not a deliberate pinch release: never commit a drop
+      // using the last cursor position. Cancel the interaction and require reacquisition.
+      cancelVirtualDrag("Tracking lost");
+      resetDwellProgress();
       lastStableGesture = "None";
     }
     $("gesture").textContent = "No hand detected";
