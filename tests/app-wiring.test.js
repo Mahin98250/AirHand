@@ -18,7 +18,7 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the browser loads one deferred classic script and bundles local helpers", () => {
-  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-15"></script>'));
+  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-16"></script>'));
   assert.ok(app.includes("function detectGesture("));
   assert.ok(app.includes("function reportAirHandRuntimeError("));
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
@@ -110,4 +110,15 @@ test("Phase 3 provides drag feedback and cleans up drag state on mode or camera 
   assert.ok(app.includes('target.classList.add("drop-target")'));
   assert.ok(app.includes("Drop complete · "));
   assert.ok(app.includes("Drop cancelled · release over a tile"));
+});
+
+
+test("Phase 4 persists validated preferences without persisting the interaction lock", () => {
+  assert.ok(html.includes('id="resetPreferences"'));
+  assert.ok(app.includes('const PREFERENCES_KEY = "airhand-preferences-v1"'));
+  assert.ok(app.includes("function readPreferences()"));
+  assert.ok(app.includes("function savePreferences()"));
+  assert.ok(app.includes("clamp(saved.cursorSensitivity, 0.12, 0.55)"));
+  assert.ok(app.includes('localStorage.removeItem(PREFERENCES_KEY)'));
+  assert.equal(app.includes("interactionsLocked, dwellDurationMs"), false);
 });
