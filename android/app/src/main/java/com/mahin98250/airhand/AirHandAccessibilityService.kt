@@ -44,8 +44,8 @@ class AirHandAccessibilityService : AccessibilityService() {
         return dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
     }
 
-    fun performNavigation(action: NavigationAction): Boolean {
-        if (!GestureCommandRouter.enabled) return false
+    fun performNavigation(action: NavigationAction, confidence: Float): Boolean {
+        if (!GestureCommandRouter.mayDispatchNavigation(confidence = confidence)) return false
         return when (action) {
             NavigationAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
             NavigationAction.HOME -> performGlobalAction(GLOBAL_ACTION_HOME)
