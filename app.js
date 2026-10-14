@@ -246,7 +246,7 @@ let inferenceErrorSince = 0;
 let fpsFrames = 0;
 let fpsWindowStart = 0;
 let currentMode = "cursor";
-const drive = { playing: false, crashed: false, score: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0 };
+const drive = { playing: false, crashed: false, score: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0, braking: false };
 let driveCanvas = null;
 let driveContext = null;
 let lastStableGesture = "None";
@@ -993,18 +993,81 @@ function fitDriveCanvas() {
 function driveRoadGeometry(width, height, y) {
   const horizon = height * 0.29;
   const t = clamp((y - horizon) / (height - horizon), 0, 1);
-  const half = 20 + t * width * 0.47;
-  const curve = Math.sin(drive.roadOffset * 0.24 + t * 2.4) * width * 0.08 * t;
-  return { t, center: width * 0.5 + curve - drive.lane * width * 0.12 * t, half, y };
+  const half = 18 + t * width * 0.455;
+  // A slow, continuous bend makes the road feel like a track instead of a vibrating ribbon.
+  const curve = Math.sin(drive.roadOffset * 0.012 + t * 2.55) * width * 0.085 * t;
+  // Small camera follow only: do not cancel the player's actual lane position.
+  const cameraFollow = drive.lane * width * 0.025 * t;
+  return { t, center: width * 0.5 + curve - cameraFollow, half, y };
 }
-function drawDriveCar(ctx, x, y, scale, color = "#43d8ff") {
-  ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
-  ctx.fillStyle = "#071321"; ctx.beginPath(); ctx.ellipse(0, 38, 36, 9, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#172b40"; ctx.beginPath(); ctx.moveTo(-29, 18); ctx.lineTo(-24, -8); ctx.quadraticCurveTo(-20, -24, -11, -28); ctx.lineTo(12, -28); ctx.quadraticCurveTo(24, -23, 27, -5); ctx.lineTo(32, 18); ctx.quadraticCurveTo(0, 30, -29, 18); ctx.fill();
-  ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(-25, 12); ctx.lineTo(-18, -8); ctx.quadraticCurveTo(-15, -18, -7, -20); ctx.lineTo(8, -20); ctx.quadraticCurveTo(18, -16, 20, -5); ctx.lineTo(27, 12); ctx.quadraticCurveTo(0, 22, -25, 12); ctx.fill();
-  ctx.fillStyle = "#7bdaee"; ctx.beginPath(); ctx.moveTo(-14, -8); ctx.lineTo(-8, -18); ctx.lineTo(8, -18); ctx.lineTo(15, -7); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#ff6479"; ctx.fillRect(-22, 10, 8, 4); ctx.fillRect(14, 10, 8, 4);
-  ctx.fillStyle = "#050b13"; ctx.fillRect(-30, 2, 7, 18); ctx.fillRect(23, 2, 7, 18);
+function drawDriveCar(ctx, x, y, scale, color = "#43d8ff", steering = 0, player = false) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(clamp(steering, -1, 1) * 0.045);
+  ctx.scale(scale, scale);
+  // Soft ground shadow.
+  ctx.fillStyle = "#06101bcc";
+  ctx.beginPath(); ctx.ellipse(0, 25, 31, 9, 0, 0, Math.PI * 2); ctx.fill();
+  // Rear tyres and wheel wells.
+  ctx.fillStyle = "#080d13";
+  roundRect(ctx, -31, -5, 9, 25, 3);
+  roundRect(ctx, 22, -5, 9, 25, 3);
+  ctx.fillStyle = "#536274";
+  ctx.fillRect(-29, 2, 5, 10); ctx.fillRect(24, 2, 5, 10);
+  // Low, wide body silhouette.
+  ctx.fillStyle = "#101c2a";
+  ctx.beginPath();
+  ctx.moveTo(-27, 17); ctx.lineTo(-30, 2); ctx.lineTo(-25, -17);
+  ctx.quadraticCurveTo(-22, -28, -13, -31); ctx.lineTo(13, -31);
+  ctx.quadraticCurveTo(23, -27, 26, -17); ctx.lineTo(30, 2);
+  ctx.lineTo(27, 17); ctx.quadraticCurveTo(0, 25, -27, 17); ctx.closePath(); ctx.fill();
+  const body = ctx.createLinearGradient(-29, -20, 29, 14);
+  body.addColorStop(0, player ? "#a6f4ff" : "#fff0e3");
+  body.addColorStop(0.12, color);
+  body.addColorStop(0.55, color);
+  body.addColorStop(1, "#15283d");
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-25, 12); ctx.lineTo(-25, -3); ctx.lineTo(-20, -18);
+  ctx.quadraticCurveTo(-17, -25, -10, -27); ctx.lineTo(10, -27);
+  ctx.quadraticCurveTo(17, -25, 20, -18); ctx.lineTo(25, -3);
+  ctx.lineTo(25, 12); ctx.quadraticCurveTo(0, 21, -25, 12); ctx.closePath(); ctx.fill();
+  // Rear window, roofline and glossy body highlights.
+  ctx.fillStyle = "#071927";
+  ctx.beginPath(); ctx.moveTo(-15, -18); ctx.lineTo(-10, -25); ctx.lineTo(10, -25); ctx.lineTo(15, -18); ctx.lineTo(18, -8); ctx.lineTo(-18, -8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#6cb7d6";
+  ctx.beginPath(); ctx.moveTo(-12, -19); ctx.lineTo(-8, -24); ctx.lineTo(0, -24); ctx.lineTo(0, -10); ctx.lineTo(-16, -10); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#c7f5ff55"; ctx.fillRect(-17, -5, 34, 2);
+  // Rear spoiler and bumper.
+  ctx.fillStyle = "#0a1623"; ctx.fillRect(-23, -13, 46, 4);
+  ctx.fillStyle = "#26394b"; ctx.fillRect(-23, 13, 46, 4);
+  ctx.fillStyle = "#080d14"; ctx.fillRect(-10, 16, 20, 3);
+  // Distinct brake/tail lamps.
+  ctx.fillStyle = "#ff334f"; ctx.fillRect(-22, 5, 8, 5); ctx.fillRect(14, 5, 8, 5);
+  ctx.fillStyle = "#ffb0b5"; ctx.fillRect(-21, 5, 5, 2); ctx.fillRect(16, 5, 5, 2);
+  if (player && drive.braking) {
+    ctx.fillStyle = "#ff536b88";
+    ctx.beginPath(); ctx.ellipse(-18, 9, 11, 5, 0, 0, Math.PI * 2); ctx.ellipse(18, 9, 11, 5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawDriveTree(ctx, x, y, size, side, depth) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size, size);
+  ctx.fillStyle = "#183e36";
+  ctx.beginPath(); ctx.ellipse(0, 4, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#684d3c";
+  ctx.fillRect(-2.3, -12, 4.6, 18);
+  for (let layer = 0; layer < 3; layer++) {
+    ctx.fillStyle = layer === 0 ? "#255d43" : layer === 1 ? "#347a50" : "#46915c";
+    ctx.beginPath();
+    const yy = -14 - layer * 9;
+    ctx.moveTo(0, yy - 18); ctx.lineTo(-12 + layer * 2, yy + 4);
+    ctx.lineTo(12 - layer * 2, yy + 4); ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = "#c7e9b633";
+  ctx.beginPath(); ctx.ellipse(side * -2, -29, 3, 9, -.25, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 function renderDrive() {
@@ -1014,76 +1077,201 @@ function renderDrive() {
   const width = driveCanvas.clientWidth || 800, height = Math.round((driveCanvas.clientWidth || 800) / 1.55);
   const ctx = driveContext;
   ctx.clearRect(0, 0, width, height);
+  const horizon = height * 0.29;
+  // Evening sky, sun glow and soft cloud bands.
   const sky = ctx.createLinearGradient(0, 0, 0, height);
-  sky.addColorStop(0, "#132e48"); sky.addColorStop(0.55, "#6b9fb7"); sky.addColorStop(1, "#e0cba6");
+  sky.addColorStop(0, "#10253e"); sky.addColorStop(0.42, "#527f9d"); sky.addColorStop(0.72, "#f0b887"); sky.addColorStop(1, "#e7d5b2");
   ctx.fillStyle = sky; ctx.fillRect(0, 0, width, height);
-  // Distant mountain silhouettes add depth without a heavy 3D engine.
-  ctx.fillStyle = "#35566b"; ctx.beginPath(); ctx.moveTo(0, height * .39);
-  for (let x = 0; x <= width + 60; x += 60) ctx.lineTo(x, height * (.24 + ((Math.sin(x * .027) + 1) * .07)));
-  ctx.lineTo(width, height * .48); ctx.lineTo(0, height * .48); ctx.fill();
-  const horizon = height * .29;
-  ctx.fillStyle = "#3d7859"; ctx.fillRect(0, horizon, width, height - horizon);
-  const near = driveRoadGeometry(width, height, height), far = driveRoadGeometry(width, height, horizon);
-  ctx.fillStyle = "#2c3542"; ctx.beginPath(); ctx.moveTo(far.center - far.half, horizon); ctx.lineTo(near.center - near.half, height); ctx.lineTo(near.center + near.half, height); ctx.lineTo(far.center + far.half, horizon); ctx.closePath(); ctx.fill();
-  // Road shoulders and dashed lane markings are projected toward the horizon.
-  ctx.strokeStyle = "#f4eee0"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(far.center - far.half, horizon); ctx.lineTo(near.center - near.half, height); ctx.moveTo(far.center + far.half, horizon); ctx.lineTo(near.center + near.half, height); ctx.stroke();
-  for (let i = 1; i <= 2; i++) {
-    const xFar = far.center - far.half + (far.half * 2 * i / 3);
-    const xNear = near.center - near.half + (near.half * 2 * i / 3);
-    for (let j = 0; j < 12; j++) {
-      const phase = ((j / 12 + drive.roadOffset * 0.035) % 1 + 1) % 1;
-      if (phase > 0.48) continue;
-      const t1 = phase, t2 = Math.min(1, phase + 0.035 + phase * 0.035);
-      const y1 = horizon + (height - horizon) * t1 * t1, y2 = horizon + (height - horizon) * t2 * t2;
-      const u1 = Math.sqrt(t1), u2 = Math.sqrt(t2);
-      ctx.strokeStyle = "#f5f3e9"; ctx.lineWidth = 1 + t1 * 5;
-      ctx.beginPath(); ctx.moveTo(far.center + (near.center - far.center) * u1 + (xFar - far.center) * u1, y1); ctx.lineTo(far.center + (near.center - far.center) * u2 + (xNear - far.center) * u2, y2); ctx.stroke();
+  const sunX = width * 0.76, sunY = height * 0.19;
+  const glow = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, height * 0.22);
+  glow.addColorStop(0, "#fff6d9c7"); glow.addColorStop(0.35, "#ffd8a44a"); glow.addColorStop(1, "#ffd8a400");
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, width, height * 0.5);
+  ctx.fillStyle = "#fff0cc";
+  ctx.beginPath(); ctx.arc(sunX, sunY, Math.max(8, height * 0.025), 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 5; i++) {
+    const cx = (((i * 0.237 + drive.roadOffset * 0.00012) % 1.25) - 0.1) * width;
+    const cy = height * (0.09 + (i % 3) * 0.055);
+    ctx.fillStyle = "#fff4e91d";
+    ctx.beginPath(); ctx.ellipse(cx, cy, width * (0.045 + (i % 2) * 0.018), height * 0.014, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // Layered mountain silhouettes give the horizon scale.
+  ctx.fillStyle = "#344f69"; ctx.beginPath(); ctx.moveTo(0, height * .39);
+  for (let x = 0; x <= width + 36; x += 36) ctx.lineTo(x, height * (.25 + ((Math.sin(x * .025) + 1) * .065)));
+  ctx.lineTo(width, height * .49); ctx.lineTo(0, height * .49); ctx.fill();
+  ctx.fillStyle = "#506d68"; ctx.beginPath(); ctx.moveTo(0, height * .43);
+  for (let x = 0; x <= width + 48; x += 48) ctx.lineTo(x, height * (.34 + ((Math.sin(x * .018 + 2) + 1) * .045)));
+  ctx.lineTo(width, height * .55); ctx.lineTo(0, height * .55); ctx.fill();
+  // Grass verge with gently moving perspective bands.
+  const ground = ctx.createLinearGradient(0, horizon, 0, height);
+  ground.addColorStop(0, "#426f53"); ground.addColorStop(1, "#193f35");
+  ctx.fillStyle = ground; ctx.fillRect(0, horizon, width, height - horizon);
+  for (let i = 0; i < 13; i++) {
+    const phase = ((i / 13 + drive.roadOffset * 0.0018) % 1 + 1) % 1;
+    const y = horizon + (height - horizon) * phase * phase;
+    ctx.fillStyle = i % 2 ? "#c6d2a10b" : "#061e2020";
+    ctx.fillRect(0, y, width, 2 + phase * 6);
+  }
+  // Trees and roadside markers approach the player to reinforce forward motion.
+  for (let i = 0; i < 17; i++) {
+    const depth = ((i / 17 + drive.roadOffset * 0.0027) % 1 + 1) % 1;
+    const y = horizon + (height - horizon) * depth * depth;
+    const road = driveRoadGeometry(width, height, y);
+    const size = 0.17 + depth * 1.02;
+    for (const side of [-1, 1]) {
+      const x = road.center + side * (road.half + 23 + depth * width * 0.17);
+      drawDriveTree(ctx, x, y, size, side, depth);
+      const postH = 3 + depth * 21;
+      ctx.fillStyle = "#dfe9e7";
+      ctx.fillRect(x - side * 7, y - postH, 2 + depth * 2, postH);
+      ctx.fillStyle = "#ffd27b";
+      ctx.fillRect(x - side * 7, y - postH, 2 + depth * 2, Math.max(2, postH * .22));
     }
   }
-  // Roadside posts shrink into the distance to sell the perspective.
-  for (let i = 0; i < 14; i++) {
-    const phase = ((i / 14 + drive.roadOffset * 0.018) % 1 + 1) % 1;
-    const t = phase * phase, y = horizon + (height - horizon) * t;
-    const road = driveRoadGeometry(width, height, y), side = i % 2 ? 1 : -1;
-    const x = road.center + side * (road.half + 12 + t * 15), h = 4 + t * 25;
-    ctx.fillStyle = "#e5e8e5"; ctx.fillRect(x, y - h, 2 + t * 3, h);
-    ctx.fillStyle = "#ffcc70"; ctx.fillRect(x, y - h, 2 + t * 3, Math.max(2, h * .24));
+  // Build a perspective-correct road surface with wide shoulders.
+  const samples = 44;
+  const shoulderPoints = [];
+  for (let i = 0; i <= samples; i++) {
+    const depth = i / samples, y = horizon + (height - horizon) * depth * depth;
+    const road = driveRoadGeometry(width, height, y);
+    shoulderPoints.push([road.center - road.half * 1.09, y]);
   }
-  for (const car of drive.traffic) {
-    const t = car.depth, y = horizon + (height - horizon) * t * t;
-    const road = driveRoadGeometry(width, height, y), x = road.center + car.lane * road.half * .62;
-    drawDriveCar(ctx, x, y, .12 + t * .72, car.color);
+  for (let i = samples; i >= 0; i--) {
+    const depth = i / samples, y = horizon + (height - horizon) * depth * depth;
+    const road = driveRoadGeometry(width, height, y);
+    shoulderPoints.push([road.center + road.half * 1.09, y]);
   }
-  const playerRoad = driveRoadGeometry(width, height, height * .89);
-  drawDriveCar(ctx, playerRoad.center + drive.lane * width * .12, height * .86, 1.12, "#43d8ff");
-  // Steering arc and confidence bar make the controller's response visible.
-  ctx.strokeStyle = "#e8f5ff88"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(width * .5, height * .89, 28, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke();
-  ctx.strokeStyle = "#69e6ff"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(width * .5, height * .89); ctx.lineTo(width * .5 + drive.steer * 25, height * .89 - 28); ctx.stroke();
+  ctx.beginPath(); shoulderPoints.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+  ctx.fillStyle = "#d2c8b1"; ctx.fill();
+  const roadPoints = [];
+  for (let i = 0; i <= samples; i++) {
+    const depth = i / samples, y = horizon + (height - horizon) * depth * depth;
+    const road = driveRoadGeometry(width, height, y);
+    roadPoints.push([road.center - road.half, y]);
+  }
+  for (let i = samples; i >= 0; i--) {
+    const depth = i / samples, y = horizon + (height - horizon) * depth * depth;
+    const road = driveRoadGeometry(width, height, y);
+    roadPoints.push([road.center + road.half, y]);
+  }
+  ctx.beginPath(); roadPoints.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+  const asphalt = ctx.createLinearGradient(0, horizon, 0, height);
+  asphalt.addColorStop(0, "#414b57"); asphalt.addColorStop(0.55, "#303943"); asphalt.addColorStop(1, "#202832");
+  ctx.fillStyle = asphalt; ctx.fill();
+  // Fine asphalt flecks remain low contrast so the road stays readable.
+  for (let i = 0; i < 170; i++) {
+    const seed = (i * 73.17) % 1;
+    const depth = ((i * 0.61803398875) % 1);
+    const y = horizon + (height - horizon) * depth * depth;
+    const road = driveRoadGeometry(width, height, y);
+    const x = road.center + (seed * 2 - 1) * road.half * .94;
+    ctx.fillStyle = i % 2 ? "#d9e0e20a" : "#07121a18";
+    ctx.fillRect(x, y, 1 + depth * 1.4, 1 + depth * 1.4);
+  }
+  // Red-white rumble strips and solid road-edge lines.
+  for (let i = 0; i < samples; i++) {
+    const d1 = i / samples, d2 = (i + 1) / samples;
+    const y1 = horizon + (height - horizon) * d1 * d1, y2 = horizon + (height - horizon) * d2 * d2;
+    const r1 = driveRoadGeometry(width, height, y1), r2 = driveRoadGeometry(width, height, y2);
+    ctx.strokeStyle = i % 2 < 1 ? "#f1f0e8" : "#d56d62";
+    ctx.lineWidth = 1 + d2 * 7;
+    ctx.beginPath(); ctx.moveTo(r1.center - r1.half, y1); ctx.lineTo(r2.center - r2.half, y2);
+    ctx.moveTo(r1.center + r1.half, y1); ctx.lineTo(r2.center + r2.half, y2); ctx.stroke();
+  }
+  ctx.strokeStyle = "#f3f0df"; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(driveRoadGeometry(width, height, horizon).center - driveRoadGeometry(width, height, horizon).half, horizon);
+  ctx.lineTo(driveRoadGeometry(width, height, height).center - driveRoadGeometry(width, height, height).half, height);
+  ctx.moveTo(driveRoadGeometry(width, height, horizon).center + driveRoadGeometry(width, height, horizon).half, horizon);
+  ctx.lineTo(driveRoadGeometry(width, height, height).center + driveRoadGeometry(width, height, height).half, height);
+  ctx.stroke();
+  // Two broken white lane separators are projected along the actual bending road.
+  for (const laneMark of [-1 / 3, 1 / 3]) {
+    for (let i = 0; i < 15; i++) {
+      const depth = ((i / 15 + drive.roadOffset * 0.0044) % 1 + 1) % 1;
+      const endDepth = Math.min(1, depth + 0.023 + depth * 0.036);
+      const y1 = horizon + (height - horizon) * depth * depth;
+      const y2 = horizon + (height - horizon) * endDepth * endDepth;
+      const r1 = driveRoadGeometry(width, height, y1), r2 = driveRoadGeometry(width, height, y2);
+      ctx.strokeStyle = "#f8f6e9";
+      ctx.globalAlpha = 0.45 + depth * 0.5;
+      ctx.lineWidth = 0.8 + depth * 4.2;
+      ctx.beginPath(); ctx.moveTo(r1.center + laneMark * r1.half, y1); ctx.lineTo(r2.center + laneMark * r2.half, y2); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+  // Traffic is sorted far-to-near so nearby vehicles correctly sit on top of distant ones.
+  const trafficByDepth = [...drive.traffic].sort((a, b) => a.depth - b.depth);
+  for (const car of trafficByDepth) {
+    const depth = car.depth, y = horizon + (height - horizon) * depth * depth;
+    const road = driveRoadGeometry(width, height, y);
+    const x = road.center + car.lane * road.half * 0.62;
+    drawDriveCar(ctx, x, y, 0.12 + depth * 0.9, car.color, 0, false);
+  }
+  // Player car is anchored lower in the scene; lane movement is intentionally strong and visible.
+  const playerY = height * 0.875;
+  const playerRoad = driveRoadGeometry(width, height, playerY);
+  const playerX = playerRoad.center + drive.lane * playerRoad.half * 0.62;
+  // A soft cyan reflection beneath the player's car.
+  const carGlow = ctx.createRadialGradient(playerX, playerY + 9, 2, playerX, playerY + 9, 48);
+  carGlow.addColorStop(0, "#4ee9ff30"); carGlow.addColorStop(1, "#4ee9ff00");
+  ctx.fillStyle = carGlow; ctx.fillRect(playerX - 55, playerY - 28, 110, 70);
+  drawDriveCar(ctx, playerX, playerY, 1.16, "#28bfea", drive.steer, true);
+  // High-speed peripheral streaks add a little sense of acceleration without hiding the track.
+  if (drive.speed > 150) {
+    ctx.strokeStyle = "#e2f6ff22"; ctx.lineWidth = 1;
+    const intensity = clamp((drive.speed - 150) / 70, 0, 1);
+    for (let i = 0; i < 10; i++) {
+      const yy = horizon + ((i * 0.137 + drive.roadOffset * 0.004) % 0.7 + 0.15) * (height - horizon);
+      const side = i % 2 ? 1 : -1;
+      const xx = side < 0 ? width * 0.05 : width * 0.95;
+      ctx.globalAlpha = intensity;
+      ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + side * -14, yy + 12 + intensity * 12); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Gentle edge vignette frames the action and HUD.
+  const vignette = ctx.createLinearGradient(0, 0, width, 0);
+  vignette.addColorStop(0, "#06101d55"); vignette.addColorStop(0.15, "#06101d00"); vignette.addColorStop(0.85, "#06101d00"); vignette.addColorStop(1, "#06101d55");
+  ctx.fillStyle = vignette; ctx.fillRect(0, 0, width, height);
+  // Steering wheel indicator.
+  const wheelX = width * 0.5, wheelY = height * 0.88;
+  ctx.strokeStyle = "#e8f5ff85"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(wheelX, wheelY, 25, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke();
+  ctx.strokeStyle = "#69e6ff"; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(wheelX, wheelY); ctx.lineTo(wheelX + drive.steer * 22, wheelY - 24); ctx.stroke();
   $("driveSpeed").textContent = String(Math.round(drive.speed));
   $("driveScore").textContent = String(Math.floor(drive.score)).padStart(4, "0");
-  $("driveSteer").textContent = drive.steer < -.15 ? "LEFT" : drive.steer > .15 ? "RIGHT" : "CENTER";
+  $("driveSteer").textContent = drive.steer < -.15 ? "LEFT" : drive.steer > .15 ? "RIGHT" : drive.braking ? "BRAKE" : "CENTER";
 }
 function startDrive() {
-  drive.playing = true; drive.crashed = false; drive.score = 0; drive.speed = 72; drive.roadOffset = 0; drive.spawnIn = .8; drive.traffic = []; drive.lastFrame = 0; drive.lane = 0;
+  drive.playing = true; drive.crashed = false; drive.braking = false; drive.score = 0; drive.speed = 82; drive.roadOffset = 0; drive.spawnIn = 1.05; drive.traffic = []; drive.lastFrame = 0; drive.lane = 0;
   $("driveOverlay").classList.add("hidden");
   renderDrive(); requestAnimationFrame(driveFrame);
 }
 function endDrive() {
-  drive.playing = false; drive.crashed = true;
-  $("driveTitle").textContent = "Crash! One more run?";
-  $("driveText").textContent = "Score " + Math.floor(drive.score) + " · Recalibrate if the wheel felt off, then try again.";
-  $("drivePlay").textContent = "Drive again"; $("driveOverlay").classList.remove("hidden");
+  drive.playing = false; drive.crashed = true; drive.braking = false;
+  $("driveTitle").textContent = "Race over — try again?";
+  $("driveText").textContent = "Distance score " + Math.floor(drive.score) + " · Turn smoothly and leave room around traffic.";
+  $("drivePlay").textContent = "Race again"; $("driveOverlay").classList.remove("hidden");
 }
 function driveFrame(now) {
   if (!drive.playing || currentMode !== "drive") return;
   const dt = Math.min(Math.max((now - (drive.lastFrame || now)) / 1000, 0), .04); drive.lastFrame = now;
-  drive.speed = Math.min(220, drive.speed + dt * 2.8); drive.score += dt * drive.speed * .12; drive.roadOffset += dt * drive.speed;
-  drive.lane += (drive.steer - drive.lane) * Math.min(1, dt * 3.4);
+  if (drive.braking) drive.speed = Math.max(0, drive.speed - dt * 105);
+  else drive.speed = Math.min(220, drive.speed + dt * 2.8);
+  drive.score += dt * drive.speed * 0.12;
+  drive.roadOffset += dt * drive.speed;
+  drive.lane += (clamp(drive.steer, -0.92, 0.92) - drive.lane) * Math.min(1, dt * 4.2);
+  drive.lane = clamp(drive.lane, -0.92, 0.92);
   drive.spawnIn -= dt;
-  if (drive.spawnIn <= 0) { drive.traffic.push({ depth: .03, lane: (Math.random() * 2 - 1) * .7, color: ["#ff7d76", "#f4c85c", "#8f9fff"][Math.floor(Math.random() * 3)] }); drive.spawnIn = Math.max(.62, 1.5 - drive.speed / 250 + Math.random() * .7); }
+  if (drive.spawnIn <= 0) {
+    const lanes = [-0.66, 0, 0.66];
+    const freeLanes = lanes.filter(lane => !drive.traffic.some(car => car.depth < 0.34 && Math.abs(car.lane - lane) < 0.18));
+    const available = freeLanes.length ? freeLanes : lanes;
+    drive.traffic.push({ depth: 0.025, lane: available[Math.floor(Math.random() * available.length)], color: ["#ff7468", "#f2bb4e", "#818cf8", "#f0f3f6"][Math.floor(Math.random() * 4)] });
+    drive.spawnIn = Math.max(0.72, 1.65 - drive.speed / 270 + Math.random() * 0.65);
+  }
   drive.traffic.forEach(car => { car.depth += dt * (0.12 + drive.speed / 900); });
-  const collision = drive.traffic.some(car => car.depth > .78 && car.depth < .91 && Math.abs(car.lane - drive.lane) < .22);
-  drive.traffic = drive.traffic.filter(car => car.depth < 1.05);
+  const collision = drive.traffic.some(car => car.depth > 0.78 && car.depth < 0.94 && Math.abs(car.lane - drive.lane) < 0.28);
+  drive.traffic = drive.traffic.filter(car => car.depth < 1.04);
   renderDrive();
   if (collision) { endDrive(); return; }
   requestAnimationFrame(driveFrame);
@@ -1464,7 +1652,7 @@ window.addEventListener("keydown", event => {
   }
   if (event.code === "Space" && currentMode === "drive") {
     event.preventDefault();
-    if (!drive.playing) startDrive(); else { drive.steer = 0; }
+    if (!drive.playing) startDrive(); else { drive.braking = true; }
     return;
   }
   if (event.code === "Space" && currentMode === "game") {
@@ -1483,8 +1671,9 @@ window.addEventListener("keydown", event => {
 });
 window.addEventListener("keyup", event => {
   if (currentMode === "drive" && ["ArrowLeft", "ArrowRight", "KeyA", "KeyD"].includes(event.code)) { driveKeyboardSteer = null; drive.steer = driveSteering?.value ?? 0; }
+  if (currentMode === "drive" && event.code === "Space") drive.braking = false;
 });
-window.addEventListener("blur", () => { driveKeyboardSteer = null; if (currentMode === "drive") drive.steer = driveSteering?.value ?? 0; });
+window.addEventListener("blur", () => { driveKeyboardSteer = null; drive.braking = false; if (currentMode === "drive") drive.steer = driveSteering?.value ?? 0; });
 window.addEventListener("resize", () => { resizeCanvases(); fitDriveCanvas(); renderDrive(); });
 window.addEventListener("pageshow", () => {
   if (cameraActive && mediaStream?.getVideoTracks().every(track => track.readyState === "ended")) handleCameraTrackEnded();
