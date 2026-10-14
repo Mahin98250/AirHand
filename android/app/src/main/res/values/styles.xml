@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.AirHand" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#4F8CFF</item>
+        <item name="colorPrimaryVariant">#245FDB</item>
+        <item name="colorSecondary">#54D6C7</item>
+        <item name="android:statusBarColor">#0A1020</item>
+        <item name="android:navigationBarColor">#0A1020</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
