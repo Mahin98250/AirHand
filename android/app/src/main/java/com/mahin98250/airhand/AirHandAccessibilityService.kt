@@ -44,6 +44,22 @@ class AirHandAccessibilityService : AccessibilityService() {
         return dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
     }
 
+    /** Dispatch a press-and-hold at the selected point, using the same confidence/freshness gate as taps. */
+    fun performLongPressAt(x: Float, y: Float, confidence: Float): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        if (!GestureCommandRouter.mayDispatch(confidence = confidence)) return false
+
+        val metrics = resources.displayMetrics
+        val safeX = x.coerceIn(1f, max(1, metrics.widthPixels - 2).toFloat())
+        val safeY = y.coerceIn(1f, max(1, metrics.heightPixels - 2).toFloat())
+        val path = Path().apply {
+            moveTo(safeX, safeY)
+            lineTo(safeX + 1f, safeY + 1f)
+        }
+        val stroke = GestureDescription.StrokeDescription(path, 0, LONG_PRESS_STROKE_MS)
+        return dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
+    }
+
     fun performNavigation(action: NavigationAction, confidence: Float): Boolean {
         if (!GestureCommandRouter.mayDispatchNavigation(confidence = confidence)) return false
         return when (action) {
@@ -70,6 +86,8 @@ class AirHandAccessibilityService : AccessibilityService() {
     enum class NavigationAction { BACK, HOME, RECENTS, NOTIFICATIONS, SCROLL_UP, SCROLL_DOWN }
 
     companion object {
+        private const val LONG_PRESS_STROKE_MS = 700L
+
         @Volatile var instance: AirHandAccessibilityService? = null
             private set
     }
