@@ -41,6 +41,11 @@ class AirHandCameraService : LifecycleService() {
     private var cursorView: CursorDotView? = null
     private var cursorParams: WindowManager.LayoutParams? = null
     private var lastStableGesture = "None"
+    private var openPalmWristY: Float? = null
+    private var lastScrollAtMs = 0L
+    private var peaceStartedAtMs = 0L
+    private var backTriggeredForPeace = false
+    private var lastBackAtMs = 0L
     @Volatile private var shuttingDown = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -97,6 +102,7 @@ class AirHandCameraService : LifecycleService() {
                         if (landmarks.size < 21) {
                             gestureEngine.reset()
                             lastStableGesture = "None"
+                            resetNavigationGestureState()
                             mainHandler.post { updateCursor(0f, 0f, visible = false) }
                             return@HandLandmarkerAnalyzer
                         }
@@ -121,6 +127,53 @@ class AirHandCameraService : LifecycleService() {
                                 )
                             }
                         }
+
+                        // Open palm is an explicit scroll mode: move the whole hand vertically.
+                        // A threshold and cooldown prevent tiny tremors from repeatedly scrolling.
+                        if (reading.stable && reading.gesture == "OpenPalm" &&
+                            GestureCommandRouter.mayDispatchNavigation(confidence = reading.confidence)) {
+                            val wristY = landmarks[0].y
+                            val previousY = openPalmWristY
+                            val now = System.currentTimeMillis()
+                            if (previousY != null && now - lastScrollAtMs >= SCROLL_COOLDOWN_MS) {
+                                val deltaY = wristY - previousY
+                                if (kotlin.math.abs(deltaY) >= SCROLL_THRESHOLD) {
+                                    val action = if (deltaY < 0f)
+                                        AirHandAccessibilityService.NavigationAction.SCROLL_DOWN
+                                    else AirHandAccessibilityService.NavigationAction.SCROLL_UP
+                                    mainHandler.post {
+                                        AirHandAccessibilityService.instance?.performNavigation(action, reading.confidence)
+                                    }
+                                    lastScrollAtMs = now
+                                    openPalmWristY = wristY
+                                }
+                            } else if (previousY == null) {
+                                openPalmWristY = wristY
+                            }
+                        } else {
+                            openPalmWristY = null
+                        }
+
+                        // Peace sign is a deliberate long-hold Back gesture, one action per pose.
+                        if (reading.stable && reading.gesture == "Peace" &&
+                            GestureCommandRouter.mayDispatchNavigation(confidence = reading.confidence)) {
+                            val now = System.currentTimeMillis()
+                            if (peaceStartedAtMs == 0L) peaceStartedAtMs = now
+                            if (!backTriggeredForPeace && now - peaceStartedAtMs >= BACK_HOLD_MS &&
+                                now - lastBackAtMs >= BACK_COOLDOWN_MS) {
+                                val sent = AirHandAccessibilityService.instance?.performNavigation(
+                                    AirHandAccessibilityService.NavigationAction.BACK, reading.confidence
+                                ) == true
+                                if (sent) {
+                                    backTriggeredForPeace = true
+                                    lastBackAtMs = now
+                                }
+                            }
+                        } else {
+                            peaceStartedAtMs = 0L
+                            backTriggeredForPeace = false
+                        }
+
                         lastStableGesture = reading.gesture
                     },
                     onError = { message ->
@@ -146,6 +199,12 @@ class AirHandCameraService : LifecycleService() {
                 }
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun resetNavigationGestureState() {
+        openPalmWristY = null
+        peaceStartedAtMs = 0L
+        backTriggeredForPeace = false
     }
 
     private fun installCursorOverlay() {
@@ -239,6 +298,7 @@ class AirHandCameraService : LifecycleService() {
         handAnalyzer = null
         gestureEngine.reset()
         lastStableGesture = "None"
+        resetNavigationGestureState()
         removeCursorOverlay()
         try { ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE) } catch (_: Exception) { }
     }
@@ -292,6 +352,10 @@ class AirHandCameraService : LifecycleService() {
         private const val NOTIFICATION_ID = 4107
         private const val STOP_REQUEST_CODE = 4108
         private const val CLICK_CONFIDENCE = 0.85f
+        private const val SCROLL_THRESHOLD = 0.13f
+        private const val SCROLL_COOLDOWN_MS = 650L
+        private const val BACK_HOLD_MS = 900L
+        private const val BACK_COOLDOWN_MS = 1_200L
         @Volatile var isRunning: Boolean = false
             private set
     }
