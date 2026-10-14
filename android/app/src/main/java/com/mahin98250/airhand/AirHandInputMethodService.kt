@@ -62,7 +62,7 @@ class AirHandInputMethodService : InputMethodService() {
 
         val rows = if (numberMode) listOf(
             listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
-            listOf("@", "#", "$", "%", "&", "-", "+", "(", ")"),
+            listOf("@", "#", "\$", "%", "&", "-", "+", "(", ")"),
             listOf("ABC", "/", ":", ";", "'", "\"","⌫"),
         ) else listOf(
             listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
