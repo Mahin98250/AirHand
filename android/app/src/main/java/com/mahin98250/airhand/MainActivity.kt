@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +13,7 @@ import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.view.Gravity
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -44,7 +46,7 @@ class MainActivity : AppCompatActivity() {
     private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (!spoken.isNullOrBlank()) {
-            status.text = "Voice input captured: “$spoken”\nNothing is sent automatically. Review and use the text in your chosen app."
+            status.text = "Voice input captured: “$spoken”\nReview and use the text in your chosen app. AirHand never sends it automatically."
         } else {
             status.text = "Voice input cancelled or no speech recognized."
         }
@@ -63,6 +65,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        status.text = if (granted) {
+            "Microphone permission granted. Open the AirHand keyboard and tap Voice when a text field is focused."
+        } else {
+            "Microphone permission denied. Keyboard typing still works; voice typing needs this permission."
+        }
+    }
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) requestSystemWideControl()
+        else status.text = "System-wide mode was not started because AirHand needs a visible Stop notification. You can grant notifications in Android Settings."
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         renderDashboard()
@@ -77,7 +92,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        // The activity preview always stops here. The explicitly started foreground service is separate.
+        // The activity preview stops here; the user-started foreground service owns its separate camera session.
         stopCameraPreview(updateStatus = false)
         super.onPause()
     }
@@ -117,7 +132,7 @@ class MainActivity : AppCompatActivity() {
 
         content.addView(heading("AirHand", 34f))
         content.addView(heading("Hands-free Android controller", 18f))
-        status = heading("Ready. System-wide mode needs explicit camera, overlay, and Accessibility permissions.", 15f)
+        status = heading("Ready. System-wide mode requires camera, overlay, Accessibility and notification permissions.", 15f)
         content.addView(status)
 
         previewView = PreviewView(this).apply {
@@ -140,25 +155,34 @@ class MainActivity : AppCompatActivity() {
             else cameraPermission.launch(Manifest.permission.CAMERA)
         }
         content.addView(cameraButton)
-
         systemControlButton = button("Start system-wide gesture control") { requestSystemWideControl() }
         content.addView(systemControlButton)
 
+        content.addView(button("Enable AirHand Gesture Keyboard") {
+            status.text = "Android will open Input Method Settings. Enable AirHand Gesture Keyboard there, then choose it from the keyboard picker."
+            startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+        })
+        content.addView(button("Choose active keyboard") {
+            val manager = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            manager.showInputMethodPicker()
+        })
+        content.addView(button("Grant microphone permission for voice typing") {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                status.text = "Microphone permission is already granted. Use the Voice key on the AirHand keyboard."
+            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+        })
         content.addView(button("Enable Accessibility actions") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         })
         content.addView(button("Allow floating overlay") {
-            if (Settings.canDrawOverlays(this)) {
-                status.text = "Overlay permission is already enabled."
-            } else {
-                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-            }
+            if (Settings.canDrawOverlays(this)) status.text = "Overlay permission is already enabled."
+            else startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         })
-        content.addView(button("Try voice typing") {
+        content.addView(button("Try voice recognition here") {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak the text you want to enter")
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak text for review")
             }
             try { speechLauncher.launch(intent) }
             catch (_: Exception) { status.text = "No compatible speech recognition app is available on this device." }
@@ -167,12 +191,12 @@ class MainActivity : AppCompatActivity() {
 
         content.addView(heading("Current milestone", 20f))
         content.addView(heading(
-            "The app can analyze camera frames locally, display geometric gesture labels in preview mode, and has a foreground-service path with a floating cursor and guarded pinch-click integration. " +
-                "This is an early prototype; full hands-free reliability has not been validated on a physical phone.",
+            "AirHand has a local hand-landmark detector, a floating cursor and a high-confidence pinch-to-tap prototype. " +
+                "The AirHand keyboard supports manual key taps and opt-in voice entry. Full reliability and compatibility still require physical-device testing.",
             14f
         ))
         content.addView(heading(
-            "Safety: a persistent notification provides a Stop action. AirHand does not send messages automatically. " +
+            "A persistent notification provides a Stop action during system-wide mode. The controller does not send messages automatically. " +
                 "Secure screens and restricted apps may block automation.",
             14f
         ))
@@ -186,6 +210,11 @@ class MainActivity : AppCompatActivity() {
     private fun requestSystemWideControl() {
         if (AirHandCameraService.isRunning) {
             stopAllControl()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -209,7 +238,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage(
                 "AirHand will keep the front camera active in a foreground service while you switch apps. " +
                     "The floating cursor follows your index fingertip. A deliberate, high-confidence pinch can tap the screen. " +
-                    "Use the persistent notification or Emergency stop to stop immediately."
+                    "A persistent notification will remain available to stop control."
             )
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Start control") { _, _ -> startSystemWideControl() }
