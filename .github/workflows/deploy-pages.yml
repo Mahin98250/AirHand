@@ -113,9 +113,9 @@ jobs:
             echo "Live SHA256:      $(sha256sum "$js_file" | cut -d' ' -f1)"
             exit 1
           fi
-          curl --fail --silent --show-error --location "$SITE_URL/manifest.webmanifest" -o "$manifest_file"
-          curl --fail --silent --show-error --location "$SITE_URL/sw.js" -o "$worker_file"
-          curl --fail --silent --show-error --location "$SITE_URL/pwa.js?v=airhand-pwa-1" -o "$pwa_file"
+          curl --fail --silent --show-error --location "${SITE_URL%/}/manifest.webmanifest" -o "$manifest_file"
+          curl --fail --silent --show-error --location "${SITE_URL%/}/sw.js" -o "$worker_file"
+          curl --fail --silent --show-error --location "${SITE_URL%/}/pwa.js?v=airhand-pwa-1" -o "$pwa_file"
           cmp -s manifest.webmanifest "$manifest_file"
           cmp -s sw.js "$worker_file"
           if ! cmp -s pwa.js "$pwa_file"; then
