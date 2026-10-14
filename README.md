@@ -45,3 +45,14 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 - The virtual cursor only controls elements inside AirHand; a normal browser page cannot move the operating-system cursor or click arbitrary desktop apps.
 - Calibration personalizes the mapping range, but it cannot compensate for every camera angle, lighting condition or hand occlusion.
 - Automated browser smoke tests use a simulated camera. Physical webcam accuracy and comfort still need to be validated on real hardware.
+
+
+## Precision engine (Phase 1)
+
+- Cursor filtering adapts to movement speed and elapsed frame time: small motion is damped while fast sweeps catch up more quickly.
+- Pinch uses separate press/release thresholds (0.28 / 0.43 palm-normalized distance) to reduce boundary flicker.
+- The live status reports whether a gesture is stabilizing or stable, with classifier confidence when available and a separate heuristic indicator for geometry-based pinch.
+- A brief 180 ms tracking-loss grace period preserves cursor/gesture state across transient inference misses; sustained loss releases the state.
+- Automated regression tests cover smoothing response, pinch hysteresis, stability status, and the tracking grace policy.
+
+**Physical validation still required:** real cameras and hands across bright/dim lighting, different distances and hand sizes, mirrored/non-mirrored preview, fast motion, temporary occlusion, and repeated pinch press/release. Automated tests do not establish real-world accuracy, and this release is not claimed to work offline.
