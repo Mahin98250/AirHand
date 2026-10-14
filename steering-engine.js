@@ -12,7 +12,7 @@ function validLandmarks(landmarks) {
  * to a user-calibrated neutral pose, and smooths the result to reduce jitter.
  */
 export class SteeringController {
-  constructor({ maxTurnRadians = 0.82, smoothing = 0.28, minHandSpan = 0.12 } = {}) {
+  constructor({ maxTurnRadians = 0.48, smoothing = 0.42, minHandSpan = 0.12 } = {}) {
     this.maxTurnRadians = maxTurnRadians;
     this.smoothing = smoothing;
     this.minHandSpan = minHandSpan;
@@ -45,7 +45,7 @@ export class SteeringController {
     if (!pair) {
       this.confidence = 0;
       // Ease back toward center rather than snapping the car when a hand disappears.
-      this.value *= 0.82;
+      this.value *= 0.72;
       return { value: this.value, confidence: 0, detected: false, calibrated: this.neutralAngle !== null };
     }
     this.lastSeenAt = now;
@@ -57,11 +57,11 @@ export class SteeringController {
     while (delta > Math.PI) delta -= Math.PI * 2;
     while (delta < -Math.PI) delta += Math.PI * 2;
     // Ignore small natural tremor, then map wheel rotation into a bounded steering range.
-    const deadZone = 0.035;
+    const deadZone = 0.018;
     const corrected = Math.abs(delta) <= deadZone ? 0 : Math.sign(delta) * (Math.abs(delta) - deadZone);
     const target = clamp(corrected / this.maxTurnRadians, -1, 1);
     this.value += (target - this.value) * this.smoothing;
-    this.confidence = clamp((pair.span - this.minHandSpan) / 0.24, 0.35, 1);
+    this.confidence = clamp((pair.span - this.minHandSpan) / 0.20, 0.4, 1);
     return { value: this.value, confidence: this.confidence, detected: true, calibrated: true };
   }
 
