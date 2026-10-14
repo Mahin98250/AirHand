@@ -75,3 +75,13 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 - **Drag feedback and cleanup:** the potential drop target is highlighted; completion and cancellation are reported. Mode changes and camera stop cancel an active drag so a stale drag cannot persist.
 
 **Physical checks still required:** test the lock with real gestures, dwell timing under natural jitter, and drag/drop across different lighting, hand sizes and camera positions. Browser tests validate software behavior only; no claim of physical accuracy or fully offline operation is made.
+
+
+## Phase 4 — Preferences and recovery
+
+- Cursor sensitivity, mirror preview, landmark visibility, dwell enablement/duration, sound, and runner difficulty are saved locally with validated ranges and safe defaults.
+- The interaction lock is intentionally **not** persisted, so a previous locked state cannot surprise the user on a new visit.
+- **Reset settings** clears saved preferences and cursor calibration and restores defaults.
+- Storage errors are handled gracefully; settings remain usable when browser storage is unavailable.
+
+**Still required:** manually verify persistence and reset behavior in the target browser and validate all hand-controlled interactions with a physical camera. Browser automation does not prove real-world gesture accuracy.
