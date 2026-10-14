@@ -15,7 +15,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    name: Validate before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Run automated tests
+        run: npm test
+      - name: Verify deployment entry points
+        run: |
+          test -f index.html
+          test -f app.js
+          test -f gesture-engine.js
+          grep -Eq 'app\.js\?v=[^"]+' index.html
+          echo "Required site files and cache-busted app entry point are present."
+
   deploy:
+    name: Publish to GitHub Pages
+    needs: validate
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -32,3 +56,17 @@ jobs:
       - name: Deploy site
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify deployed HTML and cache version
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -eu
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --location "$SITE_URL" -o /tmp/airhand-live.html; then
+              break
+            fi
+            sleep 10
+          done
+          grep -q 'app.js?v=' /tmp/airhand-live.html
+          grep -q 'AirHand' /tmp/airhand-live.html
+          echo "Live page responds and references a cache-busted app.js asset."
