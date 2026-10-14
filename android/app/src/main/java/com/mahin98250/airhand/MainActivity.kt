@@ -190,14 +190,15 @@ class MainActivity : AppCompatActivity() {
         content.addView(button("Emergency stop") { stopAllControl() })
 
         content.addView(heading("Current milestone", 20f))
+        content.addView(heading("Gesture controls", 20f))
         content.addView(heading(
-            "AirHand has a local hand-landmark detector, a floating cursor and a high-confidence pinch-to-tap prototype. " +
-                "The AirHand keyboard supports manual key taps and opt-in voice entry. Full reliability and compatibility still require physical-device testing.",
+            "Point to move the cursor • pinch once to tap • move an open palm up or down to scroll • hold a Peace sign for Back • hold a thumbs-up for Home • hold a fist to open recent apps. " +
+                "Long-hold actions fire once; release the pose before using it again.",
             14f
         ))
         content.addView(heading(
-            "A persistent notification provides a Stop action during system-wide mode. The controller does not send messages automatically. " +
-                "Secure screens and restricted apps may block automation.",
+            "For chatting, enable and choose AirHand Gesture Keyboard, then tap the text field and use its keys or Voice key. Review the message and tap Send yourself; AirHand never sends it automatically. " +
+                "A persistent notification always offers Stop while system-wide mode is active. Secure screens and restricted apps may block control.",
             14f
         ))
         scroll.addView(content)
