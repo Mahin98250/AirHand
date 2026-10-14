@@ -9,15 +9,17 @@ This directory is the native Android app track. The existing browser app remains
 - On-device MediaPipe Hand Landmarker live-stream inference over CameraX RGBA frames.
 - The hand model is downloaded from the pinned official MediaPipe model URL during the build, checked against a SHA-256 digest and expected byte count, and packaged into the APK. It is not downloaded by the app at runtime.
 - Frames are copied out of CameraX buffers before analysis, and the analyzer allows one inference frame in flight to bound memory pressure.
-- Port of AirHand's basic normalized 21-landmark geometry thresholds and 115 ms gesture stabilization to Kotlin. It currently displays gesture labels; it does not perform system actions.
-- Camera/inference cleanup when the Activity pauses or is destroyed; explicit stop button; emergency stop disables the gesture-dispatch gate.
-- Voice recognition intent displays a transcript for review; recognized text is not automatically sent to a messaging app.
-- Explicit Android Settings links for Accessibility and overlay permission.
-- Accessibility service has a narrow navigation-action foundation (Back, Home, notifications, vertical swipes) guarded by a disabled-by-default safety gate.
+- Port of AirHand's basic normalized 21-landmark geometry thresholds and 115 ms gesture stabilization to Kotlin.
+- Explicitly started foreground camera service for system-wide mode, persistent notification with Stop action, and a floating cursor overlay.
+- Pinch-to-click is edge-triggered and uses a stricter confidence threshold than navigation; hand loss clears the gesture state.
+- Open-palm vertical hand movement scrolls, with a movement threshold and cooldown. A peace sign held for 900 ms triggers Back once, with a cooldown before another Back action.
+- Central safety gates reject stale or low-confidence actions; system-wide control requires the user to enable Accessibility and overlay permissions and explicitly confirm Start.
+- Dedicated Android keyboard (InputMethodService) with letters, numbers/symbols, space, backspace, enter, and voice typing into the currently focused editor. Speech recognition is opt-in and its transcript is committed only to the focused text field.
+- The on-device model is pinned and checksum-verified at build time; camera frames are processed locally.
 
 ## Important capability boundary
 
-This is **not yet a complete hands-free controller**. Current milestone is live hand landmark detection and geometric gesture display only. It does not yet map the moving hand to a floating cursor or inject gestures into arbitrary app controls. The Accessibility gate remains disabled, and no cross-app action is automatically triggered from a detected pose. A dedicated gesture keyboard/IME and actual voice text insertion into target fields are also not implemented yet.
+This remains an **early prototype, not a validated production controller**. The code now includes a cursor, pinch click, open-palm scroll, long-hold Back, and a selectable keyboard with voice typing, but device-specific coordinate alignment, accidental-action rate, keyboard compatibility, camera lifecycle, and battery/thermal behavior still require physical testing. Some secure or restricted surfaces cannot be automated. No claim of reliable universal control is made.
 
 ## Build the debug APK
 
@@ -48,8 +50,8 @@ This downloads a roughly 7.8 MB model and verifies its checksum. The generated f
 
 ## Next milestones
 
-1. Visual hand skeleton overlay and cursor calibration on the preview, including mirror/rotation alignment.
-2. Safe floating cursor with deliberate pinch-to-click, dwell and tracking-loss release.
-3. Connect only specific, tested navigation commands to the disabled-by-default Accessibility service.
-4. Dedicated AirHand gesture keyboard (InputMethodService) and opt-in voice typing into focused fields.
-5. Device testing for latency, false clicks, battery/thermal load, interruption recovery, accessibility stop controls, and then a signed release APK.
+1. Physical-device calibration for cursor coordinates, mirror/rotation, screen insets, and different camera placements.
+2. Add gesture guide/feedback and refine the open-palm scroll threshold after real-device trials.
+3. Test the keyboard and voice typing in messaging apps, with confirmation before any message is sent.
+4. Add automated native tests for command gating, tracking loss, cooldowns, and gesture-to-action mapping.
+5. Measure latency, false clicks, battery/thermal load, interruption recovery, and stop behavior before preparing a signed release APK.
