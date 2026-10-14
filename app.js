@@ -796,6 +796,7 @@ function startGame() {
   game.combo = 0;
   game.comboTimer = 0;
   game.collected = 0;
+  lastStarMilestone = 0;
   game.starSpawnIn = 1.3;
   game.spawnIn = .65;
   lastGameFrame = 0;
@@ -840,6 +841,8 @@ function gameFrame(now) {
   game.stars = game.stars.filter(star => star.x > -20);
   game.popups.forEach(popup => { popup.life -= dt; popup.y -= dt * 24; });
   game.popups = game.popups.filter(popup => popup.life > 0);
+  const playerX = width * .17;
+  const playerTop = game.ground - 25 + game.playerY;
   const playerCenterX = playerX + 12;
   const playerCenterY = playerTop + 12;
   game.stars = game.stars.filter(star => {
@@ -862,8 +865,6 @@ function gameFrame(now) {
   });
   game.obstacles = game.obstacles.filter(obstacle => obstacle.x + obstacle.width > -2);
 
-  const playerX = width * .17;
-  const playerTop = game.ground - 25 + game.playerY;
   const collision = game.obstacles.some(obstacle =>
     playerX + 21 > obstacle.x + 2 &&
     playerX + 4 < obstacle.x + obstacle.width - 1 &&
