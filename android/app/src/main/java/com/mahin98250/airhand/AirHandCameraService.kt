@@ -44,6 +44,8 @@ class AirHandCameraService : LifecycleService() {
     private var cursorParams: WindowManager.LayoutParams? = null
     private var lastStableGesture = "None"
     private var lastTapAtMs = 0L
+    private var lastLongPressAtMs = 0L
+    private val pinchInteraction = PinchInteractionController()
     private var openPalmWristY: Float? = null
     private var lastScrollAtMs = 0L
     private val backHoldGate = GestureHoldGate()
@@ -67,6 +69,7 @@ class AirHandCameraService : LifecycleService() {
                 actionsPaused = !actionsPaused
                 GestureCommandRouter.enabled = !actionsPaused
                 GestureCommandRouter.lastDetectionAtMs = 0L
+                pinchInteraction.reset()
                 resetNavigationGestureState()
                 updateNotificationText(
                     if (actionsPaused) "Actions paused. Camera is still on; tap Resume or Stop here."
@@ -129,6 +132,7 @@ class AirHandCameraService : LifecycleService() {
                             gestureEngine.reset()
                             cursorSmoother.reset()
                             lastStableGesture = "None"
+                            pinchInteraction.reset()
                             resetNavigationGestureState()
                             mainHandler.post { updateCursor(0f, 0f, visible = false) }
                             return@HandLandmarkerAnalyzer
@@ -147,17 +151,46 @@ class AirHandCameraService : LifecycleService() {
                         val screenY = smoothed.second
                         mainHandler.post { updateCursor(screenX, screenY, visible = true) }
 
-                        val nowForTap = System.currentTimeMillis()
-                        val clickEdge = reading.stable && reading.gesture == "Pinch" &&
-                            lastStableGesture != "Pinch" && reading.confidence >= CLICK_CONFIDENCE &&
-                            nowForTap - lastTapAtMs >= CLICK_COOLDOWN_MS
-                        if (clickEdge && GestureCommandRouter.mayDispatch(confidence = reading.confidence)) {
-                            lastTapAtMs = nowForTap
-                            mainHandler.post {
-                                AirHandAccessibilityService.instance?.performTapAt(
-                                    screenX, screenY, reading.confidence
-                                )
+                        // A short, steady pinch becomes a tap on release. Holding it steadily
+                        // becomes a long press; significant drift cancels both actions.
+                        // The router gate also keeps paused mode from queueing delayed input.
+                        val pinchPoseActive = GestureCommandRouter.enabled &&
+                            reading.gesture == "Pinch" &&
+                            (reading.stable || lastStableGesture == "Pinch")
+                        val pinchAction = pinchInteraction.update(
+                            isPinching = pinchPoseActive,
+                            x = screenX,
+                            y = screenY,
+                            confidence = reading.confidence,
+                            nowMs = System.currentTimeMillis(),
+                            density = resources.displayMetrics.density
+                        )
+                        when (pinchAction?.type) {
+                            PinchActionType.TAP -> {
+                                val action = pinchAction
+                                val now = System.currentTimeMillis()
+                                if (now - lastTapAtMs >= CLICK_COOLDOWN_MS) {
+                                    lastTapAtMs = now
+                                    mainHandler.post {
+                                        AirHandAccessibilityService.instance?.performTapAt(
+                                            action.x, action.y, action.confidence
+                                        )
+                                    }
+                                }
                             }
+                            PinchActionType.LONG_PRESS -> {
+                                val action = pinchAction
+                                val now = System.currentTimeMillis()
+                                if (now - lastLongPressAtMs >= LONG_PRESS_COOLDOWN_MS) {
+                                    lastLongPressAtMs = now
+                                    mainHandler.post {
+                                        AirHandAccessibilityService.instance?.performLongPressAt(
+                                            action.x, action.y, action.confidence
+                                        )
+                                    }
+                                }
+                            }
+                            null -> Unit
                         }
 
                         // Open palm is an explicit scroll mode: move the whole hand vertically.
@@ -381,6 +414,7 @@ class AirHandCameraService : LifecycleService() {
         shuttingDown = true
         isRunning = false
         actionsPaused = false
+        pinchInteraction.reset()
         GestureCommandRouter.stop()
         try { analysisUseCase?.clearAnalyzer() } catch (_: Exception) { }
         try { cameraProvider?.unbindAll() } catch (_: Exception) { }
@@ -448,6 +482,7 @@ class AirHandCameraService : LifecycleService() {
         private const val PAUSE_REQUEST_CODE = 4109
         private const val CLICK_CONFIDENCE = 0.85f
         private const val CLICK_COOLDOWN_MS = 450L
+        private const val LONG_PRESS_COOLDOWN_MS = 900L
         private const val SCROLL_THRESHOLD = 0.13f
         private const val SCROLL_COOLDOWN_MS = 650L
         private const val BACK_HOLD_MS = 1_000L
