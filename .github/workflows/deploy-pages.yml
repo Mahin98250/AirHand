@@ -36,8 +36,14 @@ jobs:
           test -s index.html
           test -s app.js
           test -s gesture-engine.js
+          test -s manifest.webmanifest
+          test -s sw.js
+          test -s pwa.js
+          test -s airhand-icon.svg
           grep -Eq 'app\.js\?v=[^"]+' index.html
-          echo "Required site files and versioned app.js reference are present."
+          grep -Eq 'pwa\\.js\\?v=[^"]+' index.html
+          grep -q 'rel="manifest" href="./manifest.webmanifest"' index.html
+          echo "Required site files, PWA assets and versioned script references are present."
 
   deploy:
     name: Publish to GitHub Pages
@@ -66,7 +72,10 @@ jobs:
           set -euo pipefail
           html_file="$(mktemp)"
           js_file="$(mktemp)"
-          trap 'rm -f "$html_file" "$js_file"' EXIT
+          manifest_file="$(mktemp)"
+          worker_file="$(mktemp)"
+          pwa_file="$(mktemp)"
+          trap 'rm -f "$html_file" "$js_file" "$manifest_file" "$worker_file" "$pwa_file"' EXIT
 
           # Allow Pages/CDN propagation a short window, but fail loudly if still unavailable.
           fetched=0
@@ -104,4 +113,13 @@ jobs:
             echo "Live SHA256:      $(sha256sum "$js_file" | cut -d' ' -f1)"
             exit 1
           fi
-          echo "PASS: live HTML responds and the versioned app.js matches the committed file byte-for-byte."
+          curl --fail --silent --show-error --location "$SITE_URL/manifest.webmanifest" -o "$manifest_file"
+          curl --fail --silent --show-error --location "$SITE_URL/sw.js" -o "$worker_file"
+          curl --fail --silent --show-error --location "$SITE_URL/pwa.js?v=airhand-pwa-1" -o "$pwa_file"
+          cmp -s manifest.webmanifest "$manifest_file"
+          cmp -s sw.js "$worker_file"
+          if ! cmp -s pwa.js "$pwa_file"; then
+            echo "::error::Live pwa.js does not match the committed file."
+            exit 1
+          fi
+          echo "PASS: live HTML, app.js, PWA manifest, service worker and pwa.js match the committed files."
