@@ -205,7 +205,7 @@ test("Air Drive touch controls are present, accessible, and release steering or 
 
 test("Air Drive receives the corrected steering direction and polished HUD styling", () => {
   assert.ok(steering.includes("const target = clamp(direction * corrected / this.maxTurnRadians, -1, 1)"));
-  assert.ok(html.includes("app.js?v=airhand-20261014-25"));
+  assert.match(html, /<script defer src="\.\/app\.js\?v=airhand-[^"]+"><\/script>/, "The app script should use a versioned cache-busting URL");
   assert.ok(html.includes('id="driveInvert"'));
   assert.ok(app.includes('$("driveInvert").addEventListener("click"'));
   assert.ok(html.includes(".drive-hud b{font-variant-numeric:tabular-nums"));
