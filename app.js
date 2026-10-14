@@ -1,4 +1,4 @@
-import { FilesetResolver, GestureRecognizer } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm";
+import { FilesetResolver, GestureRecognizer, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm";
 import { clamp, detectGesture, GestureStabilizer, CursorSmoother } from "./gesture-engine.js";
 
 const $ = id => document.getElementById(id);
@@ -9,7 +9,7 @@ const gameCanvas = $("game");
 const gameContext = gameCanvas.getContext("2d");
 const cameraStage = $("stage");
 
-let gestureRecognizer = null;
+let gestureRecognizer = null;\nlet geometryOnlyFallback = false;
 let mediaStream = null;
 let cameraActive = false;
 let trackingFrame = 0;
@@ -109,14 +109,32 @@ async function startCamera() {
         }
       });
     } catch (gpuError) {
-      console.warn("GPU delegate unavailable; switching to CPU.", gpuError);
-      gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
-        ...modelOptions,
-        baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-tasks/gesture_recognizer/gesture_recognizer.task",
-          delegate: "CPU"
+      console.warn("Gesture model GPU initialization failed; trying CPU.", gpuError);
+      try {
+        gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
+          ...modelOptions,
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-tasks/gesture_recognizer/gesture_recognizer.task",
+            delegate: "CPU"
+          }
+        });
+      } catch (modelError) {
+        console.warn("Gesture model unavailable; falling back to landmark geometry.", modelError);
+        const handModel = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+        try {
+          gestureRecognizer = await HandLandmarker.createFromOptions(vision, {
+            ...modelOptions,
+            baseOptions: { modelAssetPath: handModel, delegate: "GPU" }
+          });
+        } catch (fallbackGpuError) {
+          console.warn("Landmark GPU initialization failed; trying CPU.", fallbackGpuError);
+          gestureRecognizer = await HandLandmarker.createFromOptions(vision, {
+            ...modelOptions,
+            baseOptions: { modelAssetPath: handModel, delegate: "CPU" }
+          });
         }
-      });
+        geometryOnlyFallback = true;
+      }
     }
 
     stabilizer.reset();
@@ -128,7 +146,7 @@ async function startCamera() {
     resizeCanvases();
     updateCameraUI(true);
     trackingFrame = requestAnimationFrame(trackFrame);
-    showToast("Camera ready — show your hand.");
+    if (geometryOnlyFallback) {\n      setReady("Fallback tracking is live", "Gesture model unavailable; geometric detection is active.");\n      showToast("Using landmark-based gesture fallback.");\n    } else {\n      showToast("Camera ready — show your hand.");\n    }
   } catch (error) {
     console.error("AirHand camera startup failed:", error);
     stopMediaTracks();
@@ -215,7 +233,7 @@ function trackFrame(now) {
   lastVideoTime = video.currentTime;
   let result;
   try {
-    result = gestureRecognizer.recognizeForVideo(video, now);
+    result = geometryOnlyFallback\n      ? gestureRecognizer.detectForVideo(video, now)\n      : gestureRecognizer.recognizeForVideo(video, now);
   } catch (error) {
     console.warn("Skipping a frame after inference error:", error);
     return;
@@ -227,7 +245,7 @@ function trackFrame(now) {
   if (result.landmarks?.length) {
     const landmarks = result.landmarks[0];
     drawLandmarks(landmarks, width, height);
-    const category = result.gestures?.[0]?.[0];
+    const category = geometryOnlyFallback ? null : result.gestures?.[0]?.[0];
     const raw = detectGesture(landmarks, stablePinch, category?.categoryName || null, category?.score || 0);
     $("gestureConfidence").textContent = raw.source === "model"
       ? "Model confidence " + Math.round((raw.confidence || 0) * 100) + "%"
