@@ -3,6 +3,7 @@ package com.mahin98250.airhand
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -13,21 +14,26 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.graphics.Color
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
+    private lateinit var detectionStatus: TextView
     private lateinit var cameraButton: Button
     private lateinit var previewView: PreviewView
     private var cameraController: LifecycleCameraController? = null
+    private var handAnalyzer: HandLandmarkerAnalyzer? = null
     private var cameraPreviewActive = false
+    private val cameraExecutor = Executors.newSingleThreadExecutor()
+    private val gestureEngine = AirHandGestureEngine()
 
     private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
@@ -57,13 +63,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        // Do not keep an active camera bound while another app or system screen is in front.
+        // Keep camera frames in the foreground app only; stop inference before leaving AirHand.
         stopCameraPreview(updateStatus = false)
         super.onPause()
     }
 
     override fun onDestroy() {
         stopCameraPreview(updateStatus = false)
+        cameraExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -95,21 +102,24 @@ class MainActivity : AppCompatActivity() {
 
         content.addView(heading("AirHand", 34f))
         content.addView(heading("Hands-free Android controller", 18f))
-        status = heading("Ready. Camera and system-control features start only after an explicit user action.", 15f)
+        status = heading("Ready. Camera and gesture detection start only after an explicit user action.", 15f)
         content.addView(status)
 
         previewView = PreviewView(this).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             scaleType = PreviewView.ScaleType.FIT_CENTER
             setBackgroundColor(Color.rgb(18, 27, 46))
-            contentDescription = "Front camera preview. Hand tracking is not active in this milestone."
+            contentDescription = "Front camera preview. On-device hand landmark detection activates when tracking starts."
         }
         content.addView(previewView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             (260 * resources.displayMetrics.density).toInt()
         ).apply { setMargins(0, 8, 0, 8) })
 
-        cameraButton = button("Enable camera / start preview") {
+        detectionStatus = heading("Hand tracking is off.", 15f)
+        content.addView(detectionStatus)
+
+        cameraButton = button("Enable camera / start hand tracking") {
             if (cameraPreviewActive) {
                 stopCameraPreview(updateStatus = true)
             } else if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -125,7 +135,7 @@ class MainActivity : AppCompatActivity() {
         })
         content.addView(button("Allow floating overlay") {
             if (Settings.canDrawOverlays(this)) {
-                status.text = "Overlay permission is already enabled. Floating cursor implementation is still pending."
+                status.text = "Overlay permission is already enabled. Floating cursor implementation remains pending."
             } else {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             }
@@ -145,13 +155,13 @@ class MainActivity : AppCompatActivity() {
         content.addView(button("Emergency stop") {
             GestureCommandRouter.stop()
             stopCameraPreview(updateStatus = false)
-            status.text = "Emergency stop active. Camera preview stopped and gesture dispatch disabled."
+            status.text = "Emergency stop active. Camera inference stopped and gesture dispatch disabled."
         })
 
         content.addView(heading("Current milestone", 20f))
         content.addView(heading(
-            "Native Android app and CameraX preview. The preview is not yet interpreted by a hand-landmark model. " +
-                "Floating cursor, gesture keyboard, and automatic cross-app gesture dispatch remain under development.",
+            "MediaPipe analyzes camera frames locally and AirHand's Kotlin gesture geometry classifies stable poses. " +
+                "This stage displays detection only; it does not control other apps yet.",
             14f
         ))
         content.addView(heading(
@@ -166,48 +176,83 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startCameraPreview() {
-        if (isFinishing || isDestroyed) return
+        if (isFinishing || isDestroyed || cameraPreviewActive) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             cameraPermission.launch(Manifest.permission.CAMERA)
             return
         }
         try {
+            val analyzer = HandLandmarkerAnalyzer(
+                context = this,
+                onFrame = { landmarks, latencyMs ->
+                    val reading = gestureEngine.update(landmarks)
+                    if (landmarks.isNotEmpty()) {
+                        GestureCommandRouter.lastDetectionAtMs = System.currentTimeMillis()
+                    }
+                    runOnUiThread {
+                        if (!cameraPreviewActive || isFinishing || isDestroyed) return@runOnUiThread
+                        if (landmarks.size < 21) {
+                            detectionStatus.text = "No hand detected. Show one hand clearly inside the camera frame."
+                        } else {
+                            val stability = if (reading.stable) "stable" else "stabilizing"
+                            detectionStatus.text =
+                                "Hand detected • ${landmarks.size} landmarks\n" +
+                                "Gesture: ${reading.gesture} ($stability; candidate: ${reading.candidate})\n" +
+                                "Inference latency: ${latencyMs} ms • on-device"
+                        }
+                    }
+                },
+                onError = { message ->
+                    runOnUiThread {
+                        if (cameraPreviewActive && !isFinishing && !isDestroyed) {
+                            detectionStatus.text = message
+                        }
+                    }
+                }
+            )
+            handAnalyzer = analyzer
             val controller = LifecycleCameraController(this).apply {
                 cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+                setImageAnalysisOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                setImageAnalysisBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                setImageAnalysisAnalyzer(cameraExecutor, analyzer)
             }
             previewView.controller = controller
             controller.bindToLifecycle(this)
             cameraController = controller
             cameraPreviewActive = true
-            previewView.contentDescription = "Front camera preview. Hand gesture inference is not active yet."
-            status.text = "Camera preview active. No frames are uploaded by this preview screen; hand inference is the next milestone."
+            detectionStatus.text = "Starting on-device hand model…"
+            status.text = "Live hand detection is running locally. Camera frames are not sent by AirHand."
         } catch (error: Exception) {
+            cameraPreviewActive = false
             stopCameraPreview(updateStatus = false)
-            status.text = "Could not start front camera preview. Close other camera apps, check permission, and try again. (${error.javaClass.simpleName})"
+            status.text = "Could not start hand tracking. Confirm the app was built with the verified model asset. (${error.javaClass.simpleName})"
+            detectionStatus.text = error.message ?: "Hand tracking setup failed."
         }
         refreshCameraButton()
     }
 
     private fun stopCameraPreview(updateStatus: Boolean) {
         cameraPreviewActive = false
-        try {
-            cameraController?.unbind()
-        } catch (_: Exception) {
-            // Cleanup must remain safe when camera startup only partially succeeded.
-        }
+        try { cameraController?.clearImageAnalysisAnalyzer() } catch (_: Exception) { }
+        try { handAnalyzer?.close() } catch (_: Exception) { }
+        handAnalyzer = null
+        try { cameraController?.unbind() } catch (_: Exception) { }
         cameraController = null
         if (::previewView.isInitialized) previewView.controller = null
-        if (updateStatus && ::status.isInitialized) status.text = "Camera preview stopped."
+        if (::detectionStatus.isInitialized) detectionStatus.text = "Hand tracking is off."
+        gestureEngine.reset()
+        if (updateStatus && ::status.isInitialized) status.text = "Camera and hand tracking stopped."
         refreshCameraButton()
     }
 
     private fun refreshCameraButton() {
         if (!::cameraButton.isInitialized) return
         cameraButton.text = when {
-            cameraPreviewActive -> "Stop camera preview"
+            cameraPreviewActive -> "Stop hand tracking"
             ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED ->
-                "Start camera preview"
-            else -> "Enable camera / start preview"
+                "Start hand tracking"
+            else -> "Enable camera / start hand tracking"
         }
     }
 }
