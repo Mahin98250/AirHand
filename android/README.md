@@ -8,7 +8,8 @@ This directory is the native Android track. The existing browser-based AirHand a
 - On-device MediaPipe Hand Landmarker inference over CameraX RGBA frames. The model is fetched by the CI workflow from the official model URL, checked against a pinned SHA-256 digest and exact byte count, then packaged in the APK.
 - Kotlin gesture geometry/stabilization adapted from the existing browser engine: Point, Pinch, Peace, OpenPalm, ThumbsUp, Fist and Unclear labels.
 - Camera analysis copies padded RGBA planes safely, corrects frame rotation and front-camera mirroring, closes CameraX buffers promptly, and bounds inference to one in-flight frame.
-- Foreground camera service for explicit system-wide mode; persistent notification with a Stop action; floating cursor overlay; adaptive screen-space cursor smoothing.
+- Foreground camera service for explicit system-wide mode; persistent notification with Pause/Resume and Stop actions; floating cursor overlay; adaptive screen-space cursor smoothing.
+- Five-second on-device cursor-range calibration in the preview screen. It learns normalized fingertip bounds, rejects incomplete/narrow movement, adds a safety margin, and stores only numeric calibration settings locally. The system-wide service loads the saved mapping when it starts.
 - Guarded pinch-to-tap integration through Android Accessibility. Open-palm vertical movement requests scroll; a Peace sign held for 1 second requests Back, a thumbs-up held for 1.35 seconds requests Home, and a fist held for 1.5 seconds requests Recent apps. Long-hold actions fire once per pose; release and re-form before they can fire again. These mappings still need physical-device false-trigger testing.
 - User-selectable Android input method named AirHand Gesture Keyboard, with QWERTY and symbols, shift, delete, space, enter, and opt-in voice entry that commits recognized speech into the currently focused text field.
 - Explicit entry points for camera, microphone, notification, overlay, and Accessibility settings. Emergency stop disables action dispatch and stops camera tracking.
@@ -48,8 +49,9 @@ The downloaded model is ignored by Git so a large binary is not accidentally com
 5. In Android Settings, enable **AirHand Gesture Actions** under Accessibility.
 6. Grant AirHand the **Display over other apps** permission.
 7. Grant notification permission on Android 13+ when asked. System-wide mode blocks startup if the Stop notification cannot be shown.
-8. Return to AirHand, tap **Start system-wide gesture control**, and confirm the explanation. The camera is active while the foreground service is running.
-9. Test cursor movement and gestures in a harmless app first. Use the notification's Pause action to temporarily disable gesture input, or Stop / AirHand's Emergency stop to end control.
+8. In AirHand, start the camera preview and tap **Calibrate cursor range · 5 seconds**. Sweep your index fingertip through the widest comfortable range, moving both horizontally and vertically. Repeat if the range is rejected. Calibration settings stay on the device.
+9. Return to AirHand and tap **Start system-wide gesture control**. Confirm the explanation. The camera is active while the foreground service is running; the saved mapping is loaded when this service starts.
+10. Test cursor movement and gestures in a harmless app first. Use the notification's Pause action to temporarily disable gesture input, or Stop / AirHand's Emergency stop to end control.
 
 ## Permission and privacy model
 
@@ -63,8 +65,8 @@ The downloaded model is ignored by Git so a large binary is not accidentally com
 
 ## Next milestones
 
-1. Validate rotation/mirroring and cursor mapping across different phone models and orientations.
-2. Add configurable pointer calibration, explicit pause/drag-lock, and a cancellable long-press/drag interaction with stronger false-trigger prevention.
+1. Physically validate the new cursor calibration flow, rotation/mirroring, cursor mapping and comfort across different phone models and orientations.
+2. Add a deliberate long-press and drag interaction with cancellation on tracking loss, app changes, and service stop.
 3. Test gesture keyboard insertion across chats, search fields, browsers and editors; add language/layout options.
 4. Run physical-device tests for latency, false clicks, missed gestures, battery/thermal load, interruption recovery, and accessible stop controls.
 5. Build and sign a release APK only after those tests, with a user-controlled key and documented release process.
