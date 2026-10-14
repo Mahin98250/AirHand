@@ -1635,7 +1635,33 @@ $("play").addEventListener("click", () => {
 });
 $("drivePlay").addEventListener("click", () => { if (currentMode !== "drive") switchMode("drive"); startDrive(); });
 $("driveCalibrate").addEventListener("click", calibrateDriveSteering);
-$("driveReset").addEventListener("click", () => { drive.playing = false; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Show both hands like you are holding a steering wheel, then calibrate."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); renderDrive(); });
+$("driveReset").addEventListener("click", () => { drive.playing = false; drive.braking = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Show both hands like you are holding a steering wheel, then calibrate."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); renderDrive(); });
+function bindDriveHold(id, onPress, onRelease) {
+  const button = $(id);
+  if (!button) return;
+  const release = event => {
+    if (event) event.preventDefault();
+    button.classList.remove("active");
+    onRelease();
+  };
+  button.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    button.classList.add("active");
+    try { button.setPointerCapture(event.pointerId); } catch {}
+    onPress();
+  });
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointercancel", release);
+  button.addEventListener("lostpointercapture", release);
+}
+const restoreDriveHandSteering = () => {
+  driveKeyboardSteer = null;
+  drive.steer = driveSteering?.value ?? 0;
+};
+bindDriveHold("driveLeft", () => { driveKeyboardSteer = -0.85; drive.steer = -0.85; }, restoreDriveHandSteering);
+bindDriveHold("driveRight", () => { driveKeyboardSteer = 0.85; drive.steer = 0.85; }, restoreDriveHandSteering);
+bindDriveHold("driveBrake", () => { drive.braking = true; }, () => { drive.braking = false; });
+
 document.querySelector(".gamebox").addEventListener("pointerdown", event => {
   // The overlay covers the canvas after a run ends; allow tapping its background to restart.
   if (event.target.closest("#play") || currentMode !== "game") return;
@@ -1673,7 +1699,7 @@ window.addEventListener("keyup", event => {
   if (currentMode === "drive" && ["ArrowLeft", "ArrowRight", "KeyA", "KeyD"].includes(event.code)) { driveKeyboardSteer = null; drive.steer = driveSteering?.value ?? 0; }
   if (currentMode === "drive" && event.code === "Space") drive.braking = false;
 });
-window.addEventListener("blur", () => { driveKeyboardSteer = null; drive.braking = false; if (currentMode === "drive") drive.steer = driveSteering?.value ?? 0; });
+window.addEventListener("blur", () => { driveKeyboardSteer = null; drive.braking = false; document.querySelectorAll(".drive-pad button").forEach(button => button.classList.remove("active")); if (currentMode === "drive") drive.steer = driveSteering?.value ?? 0; });
 window.addEventListener("resize", () => { resizeCanvases(); fitDriveCanvas(); renderDrive(); });
 window.addEventListener("pageshow", () => {
   if (cameraActive && mediaStream?.getVideoTracks().every(track => track.readyState === "ended")) handleCameraTrackEnded();
