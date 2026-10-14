@@ -12,10 +12,11 @@ function validLandmarks(landmarks) {
  * to a user-calibrated neutral pose, and smooths the result to reduce jitter.
  */
 export class SteeringController {
-  constructor({ maxTurnRadians = 0.48, smoothing = 0.42, minHandSpan = 0.12 } = {}) {
+  constructor({ maxTurnRadians = 0.48, smoothing = 0.42, minHandSpan = 0.12, inverted = false } = {}) {
     this.maxTurnRadians = maxTurnRadians;
     this.smoothing = smoothing;
     this.minHandSpan = minHandSpan;
+    this.inverted = inverted;
     this.neutralAngle = null;
     this.value = 0;
     this.confidence = 0;
@@ -59,8 +60,9 @@ export class SteeringController {
     // Ignore small natural tremor, then map wheel rotation into a bounded steering range.
     const deadZone = 0.018;
     const corrected = Math.abs(delta) <= deadZone ? 0 : Math.sign(delta) * (Math.abs(delta) - deadZone);
-    // Screen-space wrist rotation is reversed for the driver's intuitive wheel direction.
-    const target = clamp(-corrected / this.maxTurnRadians, -1, 1);
+    // Default to direct mapping; offer a live switch for camera/mirror coordinate differences.
+    const direction = this.inverted ? -1 : 1;
+    const target = clamp(direction * corrected / this.maxTurnRadians, -1, 1);
     this.value += (target - this.value) * this.smoothing;
     this.confidence = clamp((pair.span - this.minHandSpan) / 0.20, 0.4, 1);
     return { value: this.value, confidence: this.confidence, detected: true, calibrated: true };
