@@ -110,10 +110,10 @@ async function startCamera() {
       });
     } catch (gpuError) {
       console.warn("GPU delegate unavailable; switching to CPU.", gpuError);
-      landmarker = await HandLandmarker.createFromOptions(vision, {
+      gestureRecognizer = await GestureRecognizer.createFromOptions(vision, {
         ...modelOptions,
         baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-tasks/gesture_recognizer/gesture_recognizer.task",
           delegate: "CPU"
         }
       });
@@ -155,7 +155,7 @@ function stopCamera() {
   cancelAnimationFrame(trackingFrame);
   cancelAnimationFrame(gameFrameRequest);
   stopMediaTracks();
-  if (landmarker) { landmarker.close(); landmarker = null; }
+  if (gestureRecognizer) { gestureRecognizer.close(); gestureRecognizer = null; }
   video.srcObject = null;
   trackingContext.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
   stabilizer.reset();
