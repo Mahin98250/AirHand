@@ -1,3 +1,17 @@
+// Surface runtime problems in the UI so failures never look like silently dead buttons.
+let airHandErrorShown = false;
+function reportAirHandRuntimeError(message) {
+  if (airHandErrorShown) return;
+  airHandErrorShown = true;
+  console.error("AirHand runtime error:", message);
+  const title = document.getElementById("readyTitle");
+  const detail = document.getElementById("readyText");
+  if (title) title.textContent = "Controller error";
+  if (detail) detail.textContent = String(message || "Unexpected error. Reload the page and try again.").slice(0, 180);
+}
+window.addEventListener("error", event => reportAirHandRuntimeError(event.message || "A script failed to load."));
+window.addEventListener("unhandledrejection", event => reportAirHandRuntimeError(event.reason?.message || event.reason || "A background task failed."));
+
 /**
  * Geometry-based gesture primitives for AirHand.
  * All distances are normalized by palm size so thresholds adapt to camera distance.
@@ -751,3 +765,4 @@ document.addEventListener("visibilitychange", () => {
 });
 updateCameraUI(false);
 resizeCanvases();
+window.__AIRHAND_READY__ = true;
