@@ -10,7 +10,6 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.InputConnection
 import android.widget.LinearLayout
@@ -34,7 +33,7 @@ class AirHandInputMethodService : InputMethodService() {
     override fun onCreateInputView(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+            gravity = android.view.Gravity.CENTER
             setPadding(dp(4), dp(6), dp(4), dp(6))
             setBackgroundColor(Color.rgb(12, 19, 35))
         }
@@ -63,7 +62,7 @@ class AirHandInputMethodService : InputMethodService() {
 
         val rows = if (numberMode) listOf(
             listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
-            listOf("@", "#", "$", "%", "&", "-", "+", "(", ")"),
+            listOf("@", "#", "\$", "%", "&", "-", "+", "(", ")"),
             listOf("ABC", "/", ":", ";", "'", "\"", "⌫"),
         ) else listOf(
             listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
@@ -74,7 +73,7 @@ class AirHandInputMethodService : InputMethodService() {
         rows.forEach { labels ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
+                gravity = android.view.Gravity.CENTER
             }
             labels.forEach { label ->
                 val displayLabel = if (uppercase && label.length == 1 && label[0].isLetter()) label.uppercase(Locale.ROOT) else label
@@ -92,7 +91,7 @@ class AirHandInputMethodService : InputMethodService() {
 
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+            gravity = android.view.Gravity.CENTER
         }
         bottom.addView(makeKey(if (numberMode) "ABC" else "123") {
             numberMode = !numberMode
@@ -103,16 +102,17 @@ class AirHandInputMethodService : InputMethodService() {
         bottom.addView(makeKey(".") { commit(".") }, keyLayout(0.8f))
         voiceKey = makeKey(if (listening) "Listening…" else "Voice") { startVoiceRecognition() }
         bottom.addView(voiceKey, keyLayout(1.45f))
-        bottom.addView(makeKey("↵") { currentInputConnection?.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE).also {
-            if (it != true) commit("\n")
-        } }, keyLayout(1f))
+        bottom.addView(makeKey("↵") {
+            val handled = currentInputConnection?.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE) ?: false
+            if (!handled) commit("\n")
+        }, keyLayout(1f))
         root.addView(bottom, LinearLayout.LayoutParams(-1, dp(48)))
     }
 
     private fun makeKey(label: String, action: () -> Unit): TextView = TextView(this).apply {
         text = label
         textSize = if (label == "space") 12f else 16f
-        gravity = Gravity.CENTER
+        gravity = android.view.Gravity.CENTER
         setTextColor(Color.WHITE)
         isClickable = true
         isFocusable = true
@@ -146,7 +146,7 @@ class AirHandInputMethodService : InputMethodService() {
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Grant microphone permission in AirHand first.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Open AirHand and grant microphone permission to use voice typing.", Toast.LENGTH_LONG).show()
             startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return
         }
@@ -200,9 +200,7 @@ class AirHandInputMethodService : InputMethodService() {
     }
 
     private fun stopVoiceRecognition() {
-        try {
-            if (listening) speechRecognizer?.cancel()
-        } catch (_: Exception) { }
+        try { if (listening) speechRecognizer?.cancel() } catch (_: Exception) { }
         listening = false
         updateVoiceKey("Voice")
         disposeRecognizer()
