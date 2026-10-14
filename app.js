@@ -238,6 +238,8 @@ function loadCursorCalibration() {
 }
 let cursorCalibration = loadCursorCalibration();
 let calibrationRun = null;
+let calibrationFeedbackUntil = 0;
+let calibrationFeedbackText = "";
 let lastStarMilestone = 0;
 let soundEnabled = false;
 let audioContext = null;
@@ -255,6 +257,11 @@ let toastTimeout = null;
 
 function readBestScore() {
   try { return Number(localStorage.getItem("airhand-best") || 0); } catch { return 0; }
+}
+function showCalibrationFeedback(message, now = performance.now()) {
+  calibrationFeedbackText = message;
+  calibrationFeedbackUntil = now + 2600;
+  $("gestureConfidence").textContent = message;
 }
 function showToast(message) {
   const toast = $("toast");
@@ -420,7 +427,7 @@ function stopCamera() {
   stabilizer.reset();
   calibrationRun = null;
   $("calibrate").disabled = true;
-  $("calibrate").textContent = "Calibrate cursor";
+  $("calibrate").textContent = cursorCalibration.calibrated ? "Recalibrate" : "Calibrate cursor";
   lastStableGesture = "None";
   stablePinch = false;
   $("gesture").textContent = "Waiting for hand";
@@ -503,10 +510,14 @@ function trackFrame(now) {
     const category = geometryOnlyFallback ? null : selectBestModelGesture(result.gestures?.[0] || []);
     const raw = detectGesture(landmarks, stablePinch, category?.categoryName || null, category?.score || 0);
     if (!wasCalibrating) {
-      const frameGuidance = getHandFrameGuidance(landmarks);
-      $("gestureConfidence").textContent = frameGuidance || (raw.source === "model"
-        ? "Model confidence " + Math.round((raw.confidence || 0) * 100) + "%"
-        : raw.gesture === "Pinch" ? "Pinch distance normalized to palm size" : "Landmark geometry fallback");
+      if (now < calibrationFeedbackUntil) {
+        $("gestureConfidence").textContent = calibrationFeedbackText;
+      } else {
+        const frameGuidance = getHandFrameGuidance(landmarks);
+        $("gestureConfidence").textContent = frameGuidance || (raw.source === "model"
+          ? "Model confidence " + Math.round((raw.confidence || 0) * 100) + "%"
+          : raw.gesture === "Pinch" ? "Pinch distance normalized to palm size" : "Landmark geometry fallback");
+      }
     }
     const stable = stabilizer.update(raw.gesture, now);
     $("gesture").textContent = labels[stable] || labels.Unclear;
@@ -523,7 +534,6 @@ function trackFrame(now) {
       lastStableGesture = "None";
     }
     $("gesture").textContent = "No hand detected";
-    $("gestureConfidence").textContent = "Keep your hand in view";
     if (calibrationRun) {
       const remaining = Math.max(0, 5 - (now - calibrationRun.startedAt) / 1000);
       if (remaining > 0) {
@@ -531,10 +541,14 @@ function trackFrame(now) {
       } else {
         calibrationRun = null;
         $("calibrate").disabled = false;
-        $("calibrate").textContent = "Calibrate cursor";
-        $("gestureConfidence").textContent = "No hand captured — show your index finger and try again";
+        $("calibrate").textContent = cursorCalibration.calibrated ? "Recalibrate" : "Calibrate cursor";
+        showCalibrationFeedback("No hand captured — show your index finger and try again", now);
         showToast("Calibration stopped because no hand was detected.");
       }
+    } else if (now < calibrationFeedbackUntil) {
+      $("gestureConfidence").textContent = calibrationFeedbackText;
+    } else {
+      $("gestureConfidence").textContent = "Keep your hand in view";
     }
   }
 
@@ -568,6 +582,8 @@ function startCursorCalibration() {
     showToast("Enable the camera first.");
     return;
   }
+  calibrationFeedbackUntil = 0;
+  calibrationFeedbackText = "";
   calibrationRun = { startedAt: performance.now(), minX: 1, maxX: 0, minY: 1, maxY: 0, frames: 0 };
   cursorFilter.reset(0.5, 0.5);
   $("calibrate").disabled = true;
@@ -594,7 +610,7 @@ function collectCalibrationSample(indexTip, now) {
   if (run.frames < 20 || spanX < 0.16 || spanY < 0.18) {
     $("calibrate").disabled = false;
     $("calibrate").textContent = "Calibrate cursor";
-    $("gestureConfidence").textContent = "Not enough movement captured — try a wider, slower sweep";
+    showCalibrationFeedback("Not enough movement captured — try a wider, slower sweep", now);
     showToast("Calibration needs a wider range. Try again and move in all directions.");
     return false;
   }
@@ -611,7 +627,7 @@ function collectCalibrationSample(indexTip, now) {
   cursorFilter.reset(0.5, 0.5);
   $("calibrate").disabled = false;
   $("calibrate").textContent = "Recalibrate";
-  $("gestureConfidence").textContent = "Cursor calibrated to your range";
+  showCalibrationFeedback("Cursor calibrated to your range", now);
   showToast("Cursor calibrated! Your movement range is saved on this device.");
   playTone(740, 0.09);
   return false;
