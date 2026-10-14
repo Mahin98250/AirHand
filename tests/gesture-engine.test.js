@@ -43,7 +43,9 @@ test("MediaPipe model labels are preferred when classifier confidence is suffici
   const hand = baseHand();
   assert.equal(detectGesture(hand, false, "Victory", 0.91).gesture, "Peace");
   assert.equal(detectGesture(hand, false, "Thumb_Up", 0.88).gesture, "ThumbsUp");
-  assert.notEqual(detectGesture(hand, false, "Victory", 0.2).gesture, "Peace");\n  assert.notEqual(detectGesture(hand, false, "Victory", 0.66).gesture, "Peace");\n  assert.equal(detectGesture(hand, false, "Pointing_Up", 0.60).gesture, "Point");
+  assert.notEqual(detectGesture(hand, false, "Victory", 0.2).gesture, "Peace");
+  assert.notEqual(detectGesture(hand, false, "Victory", 0.66).gesture, "Peace");
+  assert.equal(detectGesture(hand, false, "Pointing_Up", 0.60).gesture, "Point");
   hand[8] = { x: 0.52, y: 0.45 };
   assert.equal(detectGesture(hand, false, "Open_Palm", 0.99).gesture, "Pinch");
 });
