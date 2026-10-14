@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.view.Gravity
@@ -15,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -28,10 +31,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var detectionStatus: TextView
     private lateinit var cameraButton: Button
+    private lateinit var systemControlButton: Button
     private lateinit var previewView: PreviewView
     private var cameraController: LifecycleCameraController? = null
     private var handAnalyzer: HandLandmarkerAnalyzer? = null
     private var cameraPreviewActive = false
+    private var requestGlobalAfterPermission = false
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private val gestureEngine = AirHandGestureEngine()
 
@@ -45,8 +51,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startCameraPreview()
-        else {
+        if (granted) {
+            if (requestGlobalAfterPermission) {
+                requestGlobalAfterPermission = false
+                requestSystemWideControl()
+            } else startCameraPreview()
+        } else {
+            requestGlobalAfterPermission = false
             status.text = "Camera permission denied. AirHand will not access the camera until you grant permission."
             refreshCameraButton()
         }
@@ -59,11 +70,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (::status.isInitialized) refreshCameraButton()
+        if (::status.isInitialized) {
+            refreshCameraButton()
+            refreshSystemControlButton()
+        }
     }
 
     override fun onPause() {
-        // Keep camera frames in the foreground app only; stop inference before leaving AirHand.
+        // The activity preview always stops here. The explicitly started foreground service is separate.
         stopCameraPreview(updateStatus = false)
         super.onPause()
     }
@@ -71,6 +85,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         stopCameraPreview(updateStatus = false)
         cameraExecutor.shutdownNow()
+        mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
@@ -102,14 +117,14 @@ class MainActivity : AppCompatActivity() {
 
         content.addView(heading("AirHand", 34f))
         content.addView(heading("Hands-free Android controller", 18f))
-        status = heading("Ready. Camera and gesture detection start only after an explicit user action.", 15f)
+        status = heading("Ready. System-wide mode needs explicit camera, overlay, and Accessibility permissions.", 15f)
         content.addView(status)
 
         previewView = PreviewView(this).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             scaleType = PreviewView.ScaleType.FIT_CENTER
             setBackgroundColor(Color.rgb(18, 27, 46))
-            contentDescription = "Front camera preview. On-device hand landmark detection activates when tracking starts."
+            contentDescription = "Front camera preview. On-device hand landmark detection activates when preview tracking starts."
         }
         content.addView(previewView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -120,22 +135,21 @@ class MainActivity : AppCompatActivity() {
         content.addView(detectionStatus)
 
         cameraButton = button("Enable camera / start hand tracking") {
-            if (cameraPreviewActive) {
-                stopCameraPreview(updateStatus = true)
-            } else if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                startCameraPreview()
-            } else {
-                cameraPermission.launch(Manifest.permission.CAMERA)
-            }
+            if (cameraPreviewActive) stopCameraPreview(updateStatus = true)
+            else if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCameraPreview()
+            else cameraPermission.launch(Manifest.permission.CAMERA)
         }
         content.addView(cameraButton)
+
+        systemControlButton = button("Start system-wide gesture control") { requestSystemWideControl() }
+        content.addView(systemControlButton)
 
         content.addView(button("Enable Accessibility actions") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         })
         content.addView(button("Allow floating overlay") {
             if (Settings.canDrawOverlays(this)) {
-                status.text = "Overlay permission is already enabled. Floating cursor implementation remains pending."
+                status.text = "Overlay permission is already enabled."
             } else {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             }
@@ -146,26 +160,19 @@ class MainActivity : AppCompatActivity() {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
                 putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak the text you want to enter")
             }
-            try {
-                speechLauncher.launch(intent)
-            } catch (_: Exception) {
-                status.text = "No compatible speech recognition app is available on this device."
-            }
+            try { speechLauncher.launch(intent) }
+            catch (_: Exception) { status.text = "No compatible speech recognition app is available on this device." }
         })
-        content.addView(button("Emergency stop") {
-            GestureCommandRouter.stop()
-            stopCameraPreview(updateStatus = false)
-            status.text = "Emergency stop active. Camera inference stopped and gesture dispatch disabled."
-        })
+        content.addView(button("Emergency stop") { stopAllControl() })
 
         content.addView(heading("Current milestone", 20f))
         content.addView(heading(
-            "MediaPipe analyzes camera frames locally and AirHand's Kotlin gesture geometry classifies stable poses. " +
-                "This stage displays detection only; it does not control other apps yet.",
+            "The app can analyze camera frames locally, display geometric gesture labels in preview mode, and has a foreground-service path with a floating cursor and guarded pinch-click integration. " +
+                "This is an early prototype; full hands-free reliability has not been validated on a physical phone.",
             14f
         ))
         content.addView(heading(
-            "Safety: AirHand does not send messages automatically. Review dictated text before using it. " +
+            "Safety: a persistent notification provides a Stop action. AirHand does not send messages automatically. " +
                 "Secure screens and restricted apps may block automation.",
             14f
         ))
@@ -173,6 +180,66 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll)
         setContentView(root)
         refreshCameraButton()
+        refreshSystemControlButton()
+    }
+
+    private fun requestSystemWideControl() {
+        if (AirHandCameraService.isRunning) {
+            stopAllControl()
+            return
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestGlobalAfterPermission = true
+            cameraPermission.launch(Manifest.permission.CAMERA)
+            return
+        }
+        if (!Settings.canDrawOverlays(this)) {
+            status.text = "Allow AirHand to display over other apps in Android Settings, then return and tap Start again."
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            return
+        }
+        if (AirHandAccessibilityService.instance == null) {
+            status.text = "Enable AirHand Gesture Actions in Accessibility Settings, then return and tap Start again."
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Start system-wide gesture control?")
+            .setMessage(
+                "AirHand will keep the front camera active in a foreground service while you switch apps. " +
+                    "The floating cursor follows your index fingertip. A deliberate, high-confidence pinch can tap the screen. " +
+                    "Use the persistent notification or Emergency stop to stop immediately."
+            )
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Start control") { _, _ -> startSystemWideControl() }
+            .show()
+    }
+
+    private fun startSystemWideControl() {
+        stopCameraPreview(updateStatus = false)
+        GestureCommandRouter.stop()
+        GestureCommandRouter.enabled = true
+        try {
+            ContextCompat.startForegroundService(this, Intent(this, AirHandCameraService::class.java))
+            status.text = "Starting system-wide gesture control. Check the persistent AirHand notification for running status and Stop."
+            systemControlButton.text = "Stop system-wide gesture control"
+            mainHandler.postDelayed({ refreshSystemControlButton() }, 1500L)
+            mainHandler.postDelayed({ refreshSystemControlButton() }, 3500L)
+        } catch (error: Exception) {
+            GestureCommandRouter.stop()
+            status.text = "Could not start system-wide mode: ${error.javaClass.simpleName}. Check camera and overlay permissions."
+            refreshSystemControlButton()
+        }
+    }
+
+    private fun stopAllControl() {
+        GestureCommandRouter.stop()
+        try { stopService(Intent(this, AirHandCameraService::class.java)) } catch (_: Exception) { }
+        stopCameraPreview(updateStatus = false)
+        status.text = "Emergency stop requested. Gesture actions are disabled and camera tracking is stopping."
+        detectionStatus.text = "Hand tracking is off."
+        refreshSystemControlButton()
     }
 
     private fun startCameraPreview() {
@@ -186,9 +253,7 @@ class MainActivity : AppCompatActivity() {
                 context = this,
                 onFrame = { landmarks, latencyMs ->
                     val reading = gestureEngine.update(landmarks)
-                    if (landmarks.isNotEmpty()) {
-                        GestureCommandRouter.lastDetectionAtMs = System.currentTimeMillis()
-                    }
+                    if (landmarks.isNotEmpty()) GestureCommandRouter.lastDetectionAtMs = System.currentTimeMillis()
                     runOnUiThread {
                         if (!cameraPreviewActive || isFinishing || isDestroyed) return@runOnUiThread
                         if (landmarks.size < 21) {
@@ -204,9 +269,7 @@ class MainActivity : AppCompatActivity() {
                 },
                 onError = { message ->
                     runOnUiThread {
-                        if (cameraPreviewActive && !isFinishing && !isDestroyed) {
-                            detectionStatus.text = message
-                        }
+                        if (cameraPreviewActive && !isFinishing && !isDestroyed) detectionStatus.text = message
                     }
                 }
             )
@@ -222,7 +285,7 @@ class MainActivity : AppCompatActivity() {
             cameraController = controller
             cameraPreviewActive = true
             detectionStatus.text = "Starting on-device hand model…"
-            status.text = "Live hand detection is running locally. Camera frames are not sent by AirHand."
+            status.text = "Live hand detection is running locally. AirHand does not upload camera frames."
         } catch (error: Exception) {
             cameraPreviewActive = false
             stopCameraPreview(updateStatus = false)
@@ -254,5 +317,11 @@ class MainActivity : AppCompatActivity() {
                 "Start hand tracking"
             else -> "Enable camera / start hand tracking"
         }
+    }
+
+    private fun refreshSystemControlButton() {
+        if (!::systemControlButton.isInitialized) return
+        systemControlButton.text = if (AirHandCameraService.isRunning) "Stop system-wide gesture control"
+        else "Start system-wide gesture control"
     }
 }
