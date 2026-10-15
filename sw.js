@@ -1,9 +1,10 @@
-const CACHE_NAME = "airhand-shell-v5";
+const CACHE_NAME = "airhand-shell-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./android-guide.html",
-  "./app.js?v=airhand-20261015-drive-3",
+  "./app.js?v=airhand-20261015-3d-1",
+  "./car3d-engine.js",
   "./pwa.js?v=airhand-pwa-2",
   "./manifest.webmanifest",
   "./airhand-icon.svg"
@@ -31,9 +32,12 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  const is3DDependency = url.origin === "https://cdn.jsdelivr.net" &&
+    (/\/@dimforge\/rapier3d-compat@|\/three@|\.wasm$|\/\+esm$/.test(url.pathname));
+  if (url.origin !== self.location.origin && !is3DDependency) return;
 
   if (request.mode === "navigate") {
+    if (url.origin !== self.location.origin) return;
     event.respondWith((async () => {
       try {
         const response = await fetch(request);
@@ -56,17 +60,17 @@ self.addEventListener("fetch", event => {
   }
 
   event.respondWith((async () => {
-    const cached = await caches.match(request);
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(request);
     if (cached) return cached;
     try {
       const response = await fetch(request);
-      if (response.ok && response.type === "basic") {
-        const cache = await caches.open(CACHE_NAME);
+      if (response.ok && (response.type === "basic" || (is3DDependency && response.type === "cors"))) {
         cache.put(request, response.clone()).catch(() => {});
       }
       return response;
     } catch (_) {
-      return new Response("", { status: 504, statusText: "Offline" });
+      return cached || new Response("", { status: 504, statusText: "Offline" });
     }
   })());
 });
