@@ -739,6 +739,24 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       stableFrameWindows = 0;
     }
   }
+  // Air Drive is an arcade road racer with no jump mechanic. Keep the player
+  // chassis on its designed road plane and remove pitch/roll accumulated by
+  // triangle-mesh contact, while preserving horizontal velocity and steering yaw.
+  function keepCarGrounded() {
+    const position = carBody.translation();
+    const velocity = carBody.linvel();
+    const rotation = carBody.rotation();
+    const angular = carBody.angvel();
+    const yaw = Math.atan2(
+      2 * (rotation.w * rotation.y + rotation.x * rotation.z),
+      1 - 2 * (rotation.y * rotation.y + rotation.x * rotation.x)
+    );
+    carBody.setTranslation({ x: position.x, y: 0.9, z: position.z }, true);
+    carBody.setLinvel({ x: velocity.x, y: 0, z: velocity.z }, true);
+    carBody.setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }, true);
+    carBody.setAngvel({ x: 0, y: angular.y, z: 0 }, true);
+  }
+
   function handleVisibilityChange() {
     if (document.hidden) {
       if (frameId) cancelAnimationFrame(frameId);
@@ -769,6 +787,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         applyCarPhysics(fixedStep);
         advanceTraffic(fixedStep);
         world.step();
+        keepCarGrounded();
         updateTrafficAndCollisions();
         accumulator -= fixedStep;
         steps++;
