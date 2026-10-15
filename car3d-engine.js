@@ -113,7 +113,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   const asphaltContext = asphaltCanvas.getContext("2d", { alpha: false });
   const asphaltPixels = asphaltContext.createImageData(asphaltCanvas.width, asphaltCanvas.height);
   for (let i = 0; i < asphaltPixels.data.length; i += 4) {
-    const grain = 48 + Math.random() * 30;
+    const grain = 176 + Math.random() * 48;
     asphaltPixels.data[i] = grain;
     asphaltPixels.data[i + 1] = grain + 2;
     asphaltPixels.data[i + 2] = grain + 5;
@@ -254,16 +254,34 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   // Roadside scenery: varied tree silhouettes and distant low-poly hills.
   const hillMat = material(0x607d67);
   const hillMat2 = material(0x718b79);
+  const hillGeo = geometry(new THREE.ConeGeometry(1, 1, 7));
+  const hillCapacity = 22;
+  const hillInstances = [
+    new THREE.InstancedMesh(hillGeo, hillMat, hillCapacity),
+    new THREE.InstancedMesh(hillGeo, hillMat2, hillCapacity)
+  ];
+  const hillCounts = [0, 0];
+  const hillDummy = new THREE.Object3D();
+  for (const instance of hillInstances) { instance.castShadow = false; instance.receiveShadow = true; scene.add(instance); }
   for (let i = 0; i < 44; i++) {
     const angle = i * 2.39996;
     const radius = 65 + (i % 7) * 7;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
     const h = 7 + (i % 5) * 2.2;
-    const hill = mesh(geometry(new THREE.ConeGeometry(8 + (i % 4) * 2, h, 7)), i % 2 ? hillMat : hillMat2);
-    hill.position.set(x, h / 2 - 0.1, z);
-    hill.rotation.y = angle;
+    const hillRadius = 8 + (i % 4) * 2;
+    const materialIndex = i % 2 ? 0 : 1;
+    hillDummy.position.set(x, h / 2 - 0.1, z);
+    hillDummy.rotation.set(0, angle, 0);
+    hillDummy.scale.set(hillRadius, h, hillRadius);
+    hillDummy.updateMatrix();
+    hillInstances[materialIndex].setMatrixAt(hillCounts[materialIndex]++, hillDummy.matrix);
   }
+  hillInstances.forEach((instance, i) => {
+    instance.count = hillCounts[i];
+    instance.instanceMatrix.needsUpdate = true;
+    instance.computeBoundingSphere();
+  });
   // Instanced tree geometry preserves varied shapes while keeping mobile draw calls low.
   const treeCount = 100;
   const trunkGeo = geometry(new THREE.CylinderGeometry(0.13, 0.22, 1.8, 6));
@@ -333,6 +351,16 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       const tail = mesh(geometry(new THREE.BoxGeometry(0.38, 0.11, 0.09)), tailLightMat, group);
       tail.position.set(x, 0.64, 1.93);
     }
+    const frontBumper = mesh(geometry(new THREE.BoxGeometry(1.78, 0.13, 0.16)), darkRailMat, group);
+    frontBumper.position.set(0, 0.32, -1.88);
+    const rearBumper = mesh(geometry(new THREE.BoxGeometry(1.76, 0.13, 0.16)), darkRailMat, group);
+    rearBumper.position.set(0, 0.32, 1.88);
+    for (const side of [-1, 1]) {
+      const mirror = mesh(geometry(new THREE.BoxGeometry(0.18, 0.11, 0.2)), paint, group);
+      mirror.position.set(side * 0.98, 0.93, -0.62);
+    }
+    const rearLip = mesh(geometry(new THREE.BoxGeometry(1.4, 0.07, 0.24)), paint, group);
+    rearLip.position.set(0, 0.95, 1.56);
     if (isPlayer) {
       const glow = new THREE.PointLight(0x79dfff, 1.3, 9);
       glow.position.set(0, 0.6, -2.2);
