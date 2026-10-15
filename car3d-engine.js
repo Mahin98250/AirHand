@@ -132,6 +132,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     new THREE.Vector3(24, 0, 43), new THREE.Vector3(-12, 0, 48),
     new THREE.Vector3(-43, 0, 28), new THREE.Vector3(-52, 0, 2)
   ], true, "centripetal");
+  const trackSamples = Array.from({ length: 120 }, (_, i) => trackCurve.getPointAt(i / 120));
   const roadWidth = 13.5;
   const roadSegments = 260;
   const roadPositions = [], roadUvs = [], roadIndices = [];
@@ -448,7 +449,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     }
     // Steering torque follows speed: responsive at low speed, calmer at high speed.
     const steerAuthority = clamp(1.0 - speed / 190, 0.24, 1);
-    const targetYawRate = controls.steer * Math.min(1.65, Math.abs(longitudinalSpeed) * 0.095) * steerAuthority * Math.sign(longitudinalSpeed || 1);
+    const targetYawRate = -controls.steer * Math.min(1.65, Math.abs(longitudinalSpeed) * 0.095) * steerAuthority * Math.sign(longitudinalSpeed || 1);
     carBody.applyTorqueImpulse({ x: 0, y: (targetYawRate - ang.y) * 1.8 * dt * 620, z: 0 }, true);
     carBody.addForce({ x: -lin.x * 10, y: 0, z: -lin.z * 10 }, true);
     carBody.addForce({ x: 0, y: -Math.abs(longitudinalSpeed) * Math.abs(longitudinalSpeed) * 0.65, z: 0 }, true);
@@ -459,8 +460,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   }
   function nearestTrackDistance(x, z) {
     let bestD = Infinity;
-    for (let i = 0; i < 120; i++) {
-      const p = trackCurve.getPointAt(i / 120);
+    for (let i = 0; i < trackSamples.length; i++) {
+      const p = trackSamples[i];
       const d = Math.hypot(x - p.x, z - p.z);
       if (d < bestD) bestD = d;
     }
