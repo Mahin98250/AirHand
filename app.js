@@ -1414,6 +1414,10 @@ async function ensureDrive3D() {
   try {
     const { createCarGame3D } = await import("./car3d-engine.js");
     drive3dInstance = await createCarGame3D($("drive3dCanvas"), {
+      onGraphicsMode(mode, pixelRatio, shadowsActive) {
+        if (status) status.textContent = (mode === "ultra" ? "Ultra graphics" : "Auto graphics") +
+          " · " + pixelRatio.toFixed(2) + "× render scale · adaptive shadows " + (shadowsActive ? "on" : "reduced");
+      },
       onTelemetry(data) {
         drive.speed = data.speed;
         drive.score = data.score;
@@ -1428,6 +1432,13 @@ async function ensureDrive3D() {
         $("driveScore").textContent = String(data.score).padStart(4, "0");
         $("driveBest").textContent = String(Math.max(drive.best, data.best || 0)).padStart(4, "0");
         $("driveSteer").textContent = data.surface || "CENTER";
+        const fps = $("driveFPS");
+        if (fps) fps.textContent = String(data.fps || 0);
+        if (status && Number.isFinite(data.pixelRatio)) {
+          const nextStatus = (data.shadowsActive ? "Adaptive shadows" : "Shadows reduced for performance") +
+            " · " + (data.fps || 0) + " FPS · " + data.pixelRatio.toFixed(2) + "× render scale";
+          if (status.textContent !== nextStatus) status.textContent = nextStatus;
+        }
         $("driveDamage").textContent = data.damage + "/3";
         $("driveNearMisses").textContent = String(data.nearMisses);
         $("driveNitroFill").style.width = data.nitro + "%";

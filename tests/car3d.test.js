@@ -46,7 +46,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v10/);
+  assert.match(worker, /airhand-shell-v11/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -59,7 +59,7 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
   assert.match(engine, /CanvasTexture\(asphaltCanvas\)/);
   assert.match(engine, /function adaptQuality\(/);
   assert.match(engine, /renderer\.setPixelRatio\(target\)/);
-  assert.match(engine, /mobileGPU \? 768 : 1536/);
+  assert.match(engine, /mobileGPU \? 512 : 1024/);
 });
 
 
@@ -88,4 +88,31 @@ test("paused 3D game does not keep scheduling animation frames", () => {
   assert.match(engine, /function start\(\)[\s\S]*?frameId = requestAnimationFrame\(frame\)/);
   assert.match(engine, /function resume\(\)[\s\S]*?if \(!frameId\) frameId = requestAnimationFrame\(frame\)/);
   assert.match(engine, /renderer\.render\(scene, camera\);\s*\}/);
+});
+
+
+test("3D renderer suspends background work and resumes only an active run", () => {
+  assert.match(engine, /function handleVisibilityChange\(\)/);
+  assert.match(engine, /if \(document\.hidden\) \{[\s\S]*?cancelAnimationFrame\(frameId\)[\s\S]*?frameId = 0/);
+  assert.match(engine, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
+  assert.match(engine, /document\.removeEventListener\("visibilitychange", handleVisibilityChange\)/);
+});
+
+test("mobile graphics adapt shadow load and expose live performance telemetry", () => {
+  assert.match(engine, /const maxPixelRatio = mobileGPU \? 1\.5 : 2\.5/);
+  assert.match(engine, /function applyShadowQuality\(\)/);
+  assert.match(engine, /if \(mobileGPU && shadowsActive && slowFrameWindows >= 2\)/);
+  assert.match(engine, /if \(mobileGPU && !shadowsActive && stableFrameWindows >= 3\)/);
+  assert.match(engine, /fps: Math\.round\(1000 \/ Math\.max\(1, frameAverageMs\)\)/);
+  assert.match(engine, /pixelRatio: renderer\.getPixelRatio\(\)/);
+  assert.match(app, /const fps = \$\("driveFPS"\)/);
+  assert.match(html, /id="driveFPS"/);
+});
+
+test("mobile cockpit provides readable graphics status and thumb-friendly touch controls", () => {
+  assert.match(html, /grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(html, /backdrop-filter:blur\(12px\)/);
+  assert.match(html, /min-height:48px/);
+  assert.match(html, /drive-controls \.drive-pad #driveBrake\{grid-column:2\/4\}/);
+  assert.match(app, /onGraphicsMode\(mode, pixelRatio, shadowsActive\)/);
 });
