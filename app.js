@@ -249,6 +249,12 @@ let fpsWindowStart = 0;
 let currentMode = "cursor";
 const drive = { playing: false, paused: false, crashed: false, score: 0, best: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0, braking: false, throttle: false, cruise: true, boosting: false, nitro: 100, damage: 0, nearMisses: 0, combo: 0, shake: 0, scene: "sunset", carColor: "#28bfea", sound: false, audioContext: null, engineOsc: null, engineFilter: null, engineGain: null };
 try { drive.best = Math.max(0, Number(localStorage.getItem("airhand-drive-best")) || 0); } catch { /* storage is optional */ }
+let drive3dEnabled = true;
+let drive3dLoading = false;
+let drive3dInstance = null;
+let driveGestureThrottle = false;
+let driveGestureBrake = false;
+let driveGestureBoost = false;
 let driveCanvas = null;
 let driveContext = null;
 let lastStableGesture = "None";
@@ -1350,6 +1356,107 @@ function renderDrive() {
   const misses = $("driveNearMisses"); if (misses) misses.textContent = String(drive.nearMisses);
   const nitroFill = $("driveNitroFill"); if (nitroFill) nitroFill.style.width = drive.nitro + "%";
   const nitroValue = $("driveNitroValue"); if (nitroValue) nitroValue.textContent = Math.round(drive.nitro) + "%";
+}
+function syncDrive3DControls() {
+  if (!drive3dEnabled || !drive3dInstance) return;
+  drive3dInstance.setControls({
+    steer: drive.steer,
+    throttle: drive.cruise || drive.throttle || driveGestureThrottle,
+    brake: drive.braking || driveGestureBrake,
+    boost: drive.boosting || driveGestureBoost
+  });
+}
+function updateDriveGestureControls(hands, gestureResults) {
+  if (!drive3dEnabled) return;
+  if (!Array.isArray(hands) || hands.length < 2) {
+    driveGestureThrottle = false;
+    driveGestureBrake = false;
+    driveGestureBoost = false;
+    syncDrive3DControls();
+    return;
+  }
+  // Use the hand on the right side of the camera for pedals, leaving both wrists
+  // available for steering. If a hand disappears, all gesture pedals release.
+  let pedalHandIndex = 0;
+  for (let i = 1; i < hands.length; i++) {
+    if (hands[i]?.[0]?.x > hands[pedalHandIndex]?.[0]?.x) pedalHandIndex = i;
+  }
+  const category = selectBestModelGesture(gestureResults?.[pedalHandIndex] || []);
+  const pedalPose = detectGesture(
+    hands[pedalHandIndex],
+    false,
+    category?.categoryName || null,
+    category?.score || 0
+  ).gesture;
+  driveGestureThrottle = pedalPose === "Fist";
+  driveGestureBrake = pedalPose === "OpenPalm";
+  driveGestureBoost = pedalPose === "ThumbsUp";
+  syncDrive3DControls();
+}
+async function ensureDrive3D() {
+  if (drive3dInstance) return true;
+  if (drive3dLoading) {
+    while (drive3dLoading) await new Promise(resolve => setTimeout(resolve, 60));
+    return !!drive3dInstance;
+  }
+  drive3dLoading = true;
+  const box = $("driveCanvas")?.parentElement;
+  const status = $("drive3dStatus");
+  if (status) status.textContent = "Loading 3D renderer and physics…";
+  if (box) box.classList.add("drive-3d-active");
+  try {
+    const { createCarGame3D } = await import("./car3d-engine.js");
+    drive3dInstance = await createCarGame3D($("drive3dCanvas"), {
+      onTelemetry(data) {
+        drive.speed = data.speed;
+        drive.score = data.score;
+        drive.damage = data.damage;
+        drive.nearMisses = data.nearMisses;
+        drive.nitro = data.nitro;
+        if (data.score > drive.best) {
+          drive.best = data.score;
+          try { localStorage.setItem("airhand-drive-best", String(drive.best)); } catch { /* storage optional */ }
+        }
+        $("driveSpeed").textContent = String(data.speed);
+        $("driveScore").textContent = String(data.score).padStart(4, "0");
+        $("driveBest").textContent = String(Math.max(drive.best, data.best || 0)).padStart(4, "0");
+        $("driveSteer").textContent = data.surface || "CENTER";
+        $("driveDamage").textContent = data.damage + "/3";
+        $("driveNearMisses").textContent = String(data.nearMisses);
+        $("driveNitroFill").style.width = data.nitro + "%";
+        $("driveNitroValue").textContent = data.nitro + "%";
+      },
+      onCollision(data) {
+        showToast("Collision · " + data.remaining + " vehicle condition points remaining.");
+      },
+      onNearMiss(data) {
+        showToast("Near miss +" + (data.score - Math.floor(drive.score)) + " · nitro recharged");
+      },
+      onGameOver(data) {
+        drive.score = data.score;
+        drive.damage = data.damage;
+        drive.nearMisses = data.nearMisses;
+        endDrive();
+      },
+      onScene(name) {
+        const statusText = $("drive3dStatus");
+        if (statusText) statusText.textContent = "3D physics active · " + (DRIVE_SCENES[name]?.label || name);
+      }
+    });
+    drive3dInstance.setScene(drive.scene);
+    drive3dInstance.setCarColour(drive.carColor);
+    syncDrive3DControls();
+    if (status) status.textContent = "3D physics ready · gestures and touch controls enabled";
+    return true;
+  } catch (error) {
+    if (box) box.classList.remove("drive-3d-active");
+    if (status) status.textContent = "3D engine unavailable · classic mode is ready";
+    console.error("Air Drive 3D failed to initialise:", error);
+    showToast("3D engine could not load. Check your internet connection; classic drive is available.");
+    return false;
+  } finally {
+    drive3dLoading = false;
+  }
 }
 function setDriveSound(enabled) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
