@@ -46,7 +46,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v13/);
+  assert.match(worker, /airhand-shell-v14/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -62,6 +62,16 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
   assert.match(engine, /mobileGPU \? 512 : 1024/);
 });
 
+
+test("3D start snaps the follow camera and reuses physics descriptors", () => {
+  assert.match(engine, /const wheelOffsets = \[[\s\S]*?front: false, left: false \}\s*\];/);
+  assert.doesNotMatch(engine, /function applyCarPhysics\(dt\)[\s\S]*?const wheelOffsets = \[/);
+  assert.match(engine, /function syncVisuals\(snapCamera = false\)/);
+  assert.match(engine, /if \(snapCamera\) camera\.position\.copy\(tempV3\)/);
+  assert.match(engine, /tempV3b\.set\(p\.x \+ forward\.x \* 4, p\.y \+ 0\.8, p\.z \+ forward\.z \* 4\)/);
+  assert.match(engine, /function start\(\)[\s\S]*?keepCarGrounded\(\);\s*syncVisuals\(true\)/);
+  assert.match(engine, /keepCarGrounded\(\);\s*syncVisuals\(true\);\s*publishTelemetry/);
+});
 
 test("arcade physics locks vertical position and pitch/roll after each physics step", () => {
   assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*updateTrafficAndCollisions\(\)/);

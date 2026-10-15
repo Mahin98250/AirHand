@@ -91,6 +91,14 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   let engineForce = 0;
   const maxSpeed = 52;
   const fixedStep = 1 / 60;
+  // Reuse these descriptors every physics tick; recreating them at 60 Hz adds
+  // needless short-lived objects and garbage collection pressure on mobile.
+  const wheelOffsets = [
+    { x: -0.76, y: -0.52, z: -1.18, front: true, left: true },
+    { x: 0.76, y: -0.52, z: -1.18, front: true, left: false },
+    { x: -0.76, y: -0.52, z: 1.18, front: false, left: true },
+    { x: 0.76, y: -0.52, z: 1.18, front: false, left: false }
+  ];
 
   function material(colour, roughness = 0.7, metalness = 0) {
     const m = new THREE.MeshStandardMaterial({ color: colour, roughness, metalness });
@@ -480,7 +488,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       item.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
     });
     paused = true; running = false;
-    syncVisuals();
+    keepCarGrounded();
+    syncVisuals(true);
     publishTelemetry(performance.now(), true);
     if (!disposed) renderer.render(scene, camera);
   }
@@ -504,7 +513,6 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const longitudinalSpeed = dot(velocity, forward);
     const lateralSpeed = dot(velocity, right);
     speed = Math.max(0, Math.abs(longitudinalSpeed) * 3.6);
-    const lateralDrift = Math.abs(lateralSpeed);
     const onTrack = nearestTrackDistance(pos.x, pos.z) < roadWidth * 0.54;
     offRoad = !onTrack;
     const surfaceGrip = onTrack ? (sceneName === "rain" ? 0.58 : 1) : 0.34;
@@ -523,12 +531,6 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     // Raycast contact points provide tyre grip only. Vertical stability comes from
     // the low-mounted chassis collider contacting the road, not spring forces that
     // can accumulate into a launch on mobile frame-rate or geometry variations.
-    const wheelOffsets = [
-      { x: -0.76, y: -0.52, z: -1.18, front: true, left: true },
-      { x: 0.76, y: -0.52, z: -1.18, front: true, left: false },
-      { x: -0.76, y: -0.52, z: 1.18, front: false, left: true },
-      { x: 0.76, y: -0.52, z: 1.18, front: false, left: false }
-    ];
     for (const wheel of wheelOffsets) {
       const arm = rotateLocal(wheel, rot);
       const wheelPos = add(pos, arm);
@@ -627,7 +629,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     }
   }
 
-  function syncVisuals() {
+  function syncVisuals(snapCamera = false) {
     const p = carBody.translation(), q = carBody.rotation();
     carRoot.position.set(p.x, p.y - 0.55, p.z);
     carRoot.quaternion.set(q.x, q.y, q.z, q.w);
@@ -641,10 +643,11 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       }
     });
     const forward = normalise(rotateLocal({ x: 0, y: 0, z: -1 }, q));
-    const desired = new THREE.Vector3(p.x - forward.x * 7.4, p.y + 3.2, p.z - forward.z * 7.4);
-    camera.position.lerp(desired, 0.11);
-    const look = new THREE.Vector3(p.x + forward.x * 4, p.y + 0.8, p.z + forward.z * 4);
-    camera.lookAt(look);
+    tempV3.set(p.x - forward.x * 7.4, p.y + 3.2, p.z - forward.z * 7.4);
+    if (snapCamera) camera.position.copy(tempV3);
+    else camera.position.lerp(tempV3, 0.11);
+    tempV3b.set(p.x + forward.x * 4, p.y + 0.8, p.z + forward.z * 4);
+    camera.lookAt(tempV3b);
     const targetFov = 62 + clamp(speed / 52, 0, 1) * 7 + (controls.boost ? 3 : 0);
     camera.fov += (targetFov - camera.fov) * 0.06;
     camera.updateProjectionMatrix();
@@ -801,6 +804,9 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   function start() {
     if (disposed) return;
     if (frameId) cancelAnimationFrame(frameId);
+    // Fail-safe on every fresh start, even if a caller skipped reset().
+    keepCarGrounded();
+    syncVisuals(true);
     running = true; paused = false; lastFrame = 0;
     frameId = requestAnimationFrame(frame);
   }
