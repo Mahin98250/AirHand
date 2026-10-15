@@ -63,6 +63,19 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
 });
 
 
+test("player sports-car model includes detailed bodywork, glazing, brakes and aero", () => {
+  assert.match(engine, /Detailed player-only sports-coupe bodywork/);
+  assert.match(engine, /const splitter = mesh/);
+  assert.match(engine, /const grille = mesh/);
+  assert.match(engine, /const windshield = mesh/);
+  assert.match(engine, /const rearGlass = mesh/);
+  assert.match(engine, /const disc = mesh/);
+  assert.match(engine, /const caliper = mesh/);
+  assert.match(engine, /const rearLightBar = mesh/);
+  assert.match(engine, /const spoiler = mesh/);
+  assert.match(engine, /if \(isPlayer\) \{[\s\S]*?Sport wheels: visible brake rotors/);
+});
+
 test("3D start snaps the follow camera and reuses physics descriptors", () => {
   assert.match(engine, /const wheelOffsets = \[[\s\S]*?front: false, left: false \}\s*\];/);
   assert.doesNotMatch(engine, /function applyCarPhysics\(dt\)[\s\S]*?const wheelOffsets = \[/);
