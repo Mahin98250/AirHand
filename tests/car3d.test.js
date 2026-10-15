@@ -46,7 +46,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v11/);
+  assert.match(worker, /airhand-shell-v12/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -63,11 +63,14 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
 });
 
 
-test("3D suspension is preloaded and chassis mass is kept in a realistic range", () => {
-  assert.match(engine, /\.setDensity\(330\)/);
+test("3D car spawn uses a low-contact collider and cannot spring-launch at startup", () => {
+  assert.match(engine, /ColliderDesc\.cuboid\(0\.9, 0\.32, 1\.82\)[\s\S]*?\.setTranslation\(0, -0\.55, 0\)/);
+  assert.match(engine, /\.setDensity\(330\)\.setFriction\(1\.15\)\.setRestitution\(0\)/);
   assert.match(engine, /const staticWheelLoad = carBody\.mass\(\) \* 9\.81 \/ 4/);
-  assert.match(engine, /staticWheelLoad \+ \(restLength - suspensionLength\) \* spring - pointVelocity\.y \* damper/);
-  assert.match(engine, /const restLength = 0\.39, spring = 22000, damper = 3200/);
+  assert.match(engine, /const tireLoad = staticWheelLoad \* 0\.25/);
+  assert.doesNotMatch(engine, /const restLength = 0\.39, spring = 22000, damper = 3200/);
+  assert.doesNotMatch(engine, /addForceAtPoint\(\{ x: 0, y: springForce, z: 0 \}/);
+  assert.match(engine, /carBody\.applyImpulse\(\{ x: \(p\.x - t\.x\) \* 320, y: 0, z: \(p\.z - t\.z\) \* 320 \}/);
 });
 
 test("Ultra rendering mode remains adaptive and repeated scenery uses instancing", () => {
