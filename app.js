@@ -521,6 +521,8 @@ function stopMediaTracks() {
   }
 }
 function stopCamera() {
+  driveGestureThrottle = false; driveGestureBrake = false; driveGestureBoost = false;
+  syncDrive3DControls();
   cancelVirtualDrag("Camera stopped");
   resetDwellProgress();
   cameraActive = false;
@@ -1549,6 +1551,7 @@ async function startDrive() {
   drive.playing = true;
   drive.paused = false;
   drive.crashed = false;
+  if (drive3dEnabled) drive.cruise = false;
   drive.braking = false;
   drive.throttle = false;
   drive.boosting = false;
@@ -2212,6 +2215,8 @@ window.addEventListener("pageshow", () => {
 video.addEventListener("loadedmetadata", fitCameraFrameToVideo);
 window.addEventListener("pagehide", () => {
   pageIsClosing = true;
+  if (drive3dInstance) drive3dInstance.dispose();
+  drive3dInstance = null;
   cancelAnimationFrame(gameFrameRequest);
   if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
   driveFrameRequest = 0;
