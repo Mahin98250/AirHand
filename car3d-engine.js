@@ -745,8 +745,23 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       stableFrameWindows = 0;
     }
   }
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      if (frameId) cancelAnimationFrame(frameId);
+      frameId = 0;
+      lastFrame = 0;
+      return;
+    }
+    if (running && !paused && !disposed && !frameId) {
+      lastFrame = 0;
+      frameId = requestAnimationFrame(frame);
+    }
+  }
   function frame(now) {
-    if (disposed) return;
+    if (disposed || document.hidden) {
+      frameId = 0;
+      return;
+    }
     frameId = requestAnimationFrame(frame);
     const frameMs = lastFrame ? now - lastFrame : 16.7;
     const dt = Math.min(0.05, Math.max(0, frameMs / 1000));
@@ -782,6 +797,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     disposed = true; running = false; paused = true;
     if (frameId) cancelAnimationFrame(frameId);
     window.removeEventListener("resize", resize);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
     renderer.dispose();
     asphaltTexture.dispose();
     world.free();
@@ -791,6 +807,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
 
   resize();
   window.addEventListener("resize", resize);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   reset();
   setScene("sunset");
   renderer.render(scene, camera);
