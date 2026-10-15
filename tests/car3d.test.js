@@ -61,3 +61,21 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
   assert.match(engine, /renderer\.setPixelRatio\(target\)/);
   assert.match(engine, /mobileGPU \? 768 : 1536/);
 });
+
+
+test("3D suspension is preloaded and chassis mass is kept in a realistic range", () => {
+  assert.match(engine, /\.setDensity\(330\)/);
+  assert.match(engine, /const staticWheelLoad = carBody\.mass\(\) \* 9\.81 \/ 4/);
+  assert.match(engine, /staticWheelLoad \+ \(restLength - suspensionLength\) \* spring - pointVelocity\.y \* damper/);
+  assert.match(engine, /const restLength = 0\.39, spring = 22000, damper = 3200/);
+});
+
+test("Ultra rendering mode remains adaptive and repeated scenery uses instancing", () => {
+  assert.match(engine, /function setGraphicsMode\(mode = "auto"\)/);
+  assert.match(engine, /qualityMode === "ultra"/);
+  assert.match(engine, /new THREE\.InstancedMesh\(railGeo/);
+  assert.match(engine, /new THREE\.InstancedMesh\(dashGeo/);
+  assert.match(engine, /new THREE\.InstancedMesh\(trunkGeo/);
+  assert.match(app, /drive3dInstance\.setGraphicsMode/);
+  assert.match(html, /id="driveGraphics"/);
+});
