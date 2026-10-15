@@ -246,7 +246,7 @@ let inferenceErrorSince = 0;
 let fpsFrames = 0;
 let fpsWindowStart = 0;
 let currentMode = "cursor";
-const drive = { playing: false, crashed: false, score: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0, braking: false };
+const drive = { playing: false, paused: false, crashed: false, score: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0, braking: false, throttle: false, cruise: true, boosting: false, nitro: 100, damage: 0, nearMisses: 0, combo: 0, shake: 0, scene: "sunset", carColor: "#28bfea", sound: false, audioContext: null, engineOsc: null, engineFilter: null, engineGain: null };
 let driveCanvas = null;
 let driveContext = null;
 let lastStableGesture = "None";
@@ -1254,41 +1254,199 @@ function renderDrive() {
   $("driveScore").textContent = String(Math.floor(drive.score)).padStart(4, "0");
   $("driveSteer").textContent = drive.steer < -.15 ? "LEFT" : drive.steer > .15 ? "RIGHT" : drive.braking ? "BRAKE" : "CENTER";
 }
-function startDrive() {
-  drive.playing = true; drive.crashed = false; drive.braking = false; drive.score = 0; drive.speed = 82; drive.roadOffset = 0; drive.spawnIn = 1.05; drive.traffic = []; drive.lastFrame = 0; drive.lane = 0;
-  $("driveOverlay").classList.add("hidden");
-  renderDrive(); requestAnimationFrame(driveFrame);
-}
-function endDrive() {
-  drive.playing = false; drive.crashed = true; drive.braking = false;
-  $("driveTitle").textContent = "Race over — try again?";
-  $("driveText").textContent = "Distance score " + Math.floor(drive.score) + " · Turn smoothly and leave room around traffic.";
-  $("drivePlay").textContent = "Race again"; $("driveOverlay").classList.remove("hidden");
-}
-function driveFrame(now) {
-  if (!drive.playing || currentMode !== "drive") return;
-  const dt = Math.min(Math.max((now - (drive.lastFrame || now)) / 1000, 0), .04); drive.lastFrame = now;
-  if (drive.braking) drive.speed = Math.max(0, drive.speed - dt * 105);
-  else drive.speed = Math.min(220, drive.speed + dt * 2.8);
-  drive.score += dt * drive.speed * 0.12;
-  drive.roadOffset += dt * drive.speed;
-  drive.lane += (clamp(drive.steer, -0.92, 0.92) - drive.lane) * (1 - Math.exp(-dt * 6.5));
-  drive.lane = clamp(drive.lane, -0.92, 0.92);
-  drive.spawnIn -= dt;
-  if (drive.spawnIn <= 0) {
-    const lanes = [-0.66, 0, 0.66];
-    const freeLanes = lanes.filter(lane => !drive.traffic.some(car => car.depth < 0.34 && Math.abs(car.lane - lane) < 0.18));
-    const available = freeLanes.length ? freeLanes : lanes;
-    drive.traffic.push({ depth: 0.025, lane: available[Math.floor(Math.random() * available.length)], color: ["#ff7468", "#f2bb4e", "#818cf8", "#f0f3f6"][Math.floor(Math.random() * 4)] });
-    drive.spawnIn = Math.max(0.72, 1.65 - drive.speed / 270 + Math.random() * 0.65);
+function setDriveSound(enabled) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (enabled && !AudioContextClass) {
+    drive.sound = false;
+    showToast("Engine audio is not supported in this browser.");
+    return;
   }
-  drive.traffic.forEach(car => { car.depth += dt * (0.12 + drive.speed / 900); });
-  const collision = drive.traffic.some(car => car.depth > 0.78 && car.depth < 0.94 && Math.abs(car.lane - drive.lane) < 0.28);
-  drive.traffic = drive.traffic.filter(car => car.depth < 1.04);
-  renderDrive();
-  if (collision) { endDrive(); return; }
+  drive.sound = !!enabled;
+  if (drive.sound && !drive.audioContext) {
+    try {
+      drive.audioContext = new AudioContextClass();
+      drive.engineOsc = drive.audioContext.createOscillator();
+      drive.engineFilter = drive.audioContext.createBiquadFilter();
+      drive.engineGain = drive.audioContext.createGain();
+      drive.engineOsc.type = "sawtooth";
+      drive.engineFilter.type = "lowpass";
+      drive.engineFilter.frequency.value = 420;
+      drive.engineGain.gain.value = 0;
+      drive.engineOsc.connect(drive.engineFilter);
+      drive.engineFilter.connect(drive.engineGain);
+      drive.engineGain.connect(drive.audioContext.destination);
+      drive.engineOsc.start();
+    } catch (error) {
+      drive.sound = false;
+      console.warn("Air Drive audio unavailable:", error);
+    }
+  }
+  if (drive.audioContext && drive.sound) drive.audioContext.resume().catch(() => {});
+  if (drive.engineGain && drive.audioContext) {
+    drive.engineGain.gain.setTargetAtTime(drive.sound && drive.playing ? 0.025 : 0, drive.audioContext.currentTime, 0.08);
+  }
+  const button = $("driveSound");
+  if (button) {
+    button.setAttribute("aria-pressed", String(drive.sound));
+    button.textContent = drive.sound ? "♫ Engine sound: ON" : "♫ Engine sound: OFF";
+  }
+}
+function updateDriveAudio() {
+  if (!drive.sound || !drive.audioContext || !drive.engineOsc || !drive.engineGain) return;
+  const time = drive.audioContext.currentTime;
+  drive.engineOsc.frequency.setTargetAtTime(38 + drive.speed * 0.72 + (drive.boosting ? 22 : 0), time, 0.07);
+  if (drive.engineFilter) drive.engineFilter.frequency.setTargetAtTime(300 + drive.speed * 5.5, time, 0.1);
+  drive.engineGain.gain.setTargetAtTime(drive.playing && !drive.paused ? 0.012 + drive.speed / 12000 + (drive.boosting ? 0.012 : 0) : 0, time, 0.1);
+}
+function pauseDrive() {
+  if (!drive.playing || drive.paused) return;
+  drive.paused = true;
+  drive.throttle = false;
+  drive.boosting = false;
+  $("drivePause").textContent = "▶ Resume";
+  $("driveTitle").textContent = "Pit stop · paused";
+  $("driveText").textContent = "Take a breath, then resume. Your score, traffic and vehicle condition are preserved.";
+  $("drivePlay").textContent = "Resume drive";
+  $("driveOverlay").classList.remove("hidden");
+  updateDriveAudio();
+}
+function resumeDrive() {
+  if (!drive.playing || !drive.paused) return;
+  drive.paused = false;
+  drive.lastFrame = 0;
+  $("driveOverlay").classList.add("hidden");
+  $("drivePause").textContent = "Ⅱ Pause";
+  updateDriveAudio();
   requestAnimationFrame(driveFrame);
 }
+function startDrive() {
+  drive.playing = true;
+  drive.paused = false;
+  drive.crashed = false;
+  drive.braking = false;
+  drive.throttle = false;
+  drive.boosting = false;
+  drive.score = 0;
+  drive.speed = 0;
+  drive.roadOffset = 0;
+  drive.spawnIn = 1.25;
+  drive.traffic = [];
+  drive.lastFrame = 0;
+  drive.lane = 0;
+  drive.nitro = 100;
+  drive.damage = 0;
+  drive.nearMisses = 0;
+  drive.combo = 0;
+  drive.shake = 0;
+  $("drivePause").textContent = "Ⅱ Pause";
+  $("driveCruise").setAttribute("aria-pressed", String(drive.cruise));
+  $("driveCruise").textContent = drive.cruise ? "Cruise control: ON" : "Cruise control: OFF";
+  $("driveOverlay").classList.add("hidden");
+  renderDrive();
+  updateDriveAudio();
+  requestAnimationFrame(driveFrame);
+}
+function endDrive() {
+  drive.playing = false;
+  drive.paused = false;
+  drive.crashed = true;
+  drive.braking = false;
+  drive.throttle = false;
+  drive.boosting = false;
+  $("drivePause").textContent = "Ⅱ Pause";
+  $("driveTitle").textContent = "Session over · vehicle needs service";
+  $("driveText").textContent = "Distance score " + Math.floor(drive.score) + " · Near misses " + drive.nearMisses + " · Damage " + drive.damage + "/3. Reset to take another drive.";
+  $("drivePlay").textContent = "Drive again";
+  $("driveOverlay").classList.remove("hidden");
+  updateDriveAudio();
+}
+function driveFrame(now) {
+  if (!drive.playing || drive.paused || currentMode !== "drive") return;
+  const dt = Math.min(Math.max((now - (drive.lastFrame || now)) / 1000, 0), 0.04);
+  drive.lastFrame = now;
+
+  // Light arcade-simulation physics: throttle builds speed, coasting rolls down gradually,
+  // braking sheds speed quickly, and nitro briefly raises the speed ceiling.
+  if (drive.braking) {
+    drive.speed = Math.max(0, drive.speed - dt * (drive.speed > 120 ? 158 : 112));
+  } else if (drive.cruise || drive.throttle) {
+    drive.speed = Math.min(drive.boosting && drive.nitro > 0 ? 265 : 220, drive.speed + dt * (drive.boosting ? 42 : 25));
+  } else {
+    drive.speed = Math.max(0, drive.speed - dt * 7.5);
+  }
+  if (drive.boosting && drive.nitro > 0 && !drive.braking) {
+    drive.nitro = Math.max(0, drive.nitro - dt * 34);
+  } else {
+    drive.boosting = false;
+    drive.nitro = Math.min(100, drive.nitro + dt * 8.5);
+  }
+  drive.score += dt * drive.speed * 0.12;
+  drive.roadOffset += dt * drive.speed * (drive.boosting ? 1.32 : 1);
+  const steeringStrength = 4.6 + Math.min(2.8, drive.speed / 75);
+  drive.lane += (clamp(drive.steer, -0.92, 0.92) - drive.lane) * (1 - Math.exp(-dt * steeringStrength));
+  drive.lane = clamp(drive.lane, -0.98, 0.98);
+  if (Math.abs(drive.lane) > 0.74 && drive.speed > 35) {
+    drive.speed = Math.max(24, drive.speed - dt * 22);
+    drive.shake = Math.max(drive.shake, 0.06);
+  }
+  drive.shake = Math.max(0, drive.shake - dt);
+  drive.spawnIn -= dt;
+  if (drive.spawnIn <= 0 && drive.speed > 18) {
+    const lanes = [-0.66, 0, 0.66];
+    const freeLanes = lanes.filter(lane => !drive.traffic.some(car => car.depth < 0.38 && Math.abs(car.lane - lane) < 0.2));
+    const available = freeLanes.length ? freeLanes : lanes;
+    const palette = ["#ff7468", "#f2bb4e", "#818cf8", "#f0f3f6", "#64d6a2", "#e5a4ff"];
+    drive.traffic.push({
+      depth: 0.025,
+      lane: available[Math.floor(Math.random() * available.length)],
+      color: palette[Math.floor(Math.random() * palette.length)],
+      passed: false,
+      hit: false,
+      type: Math.random() < 0.18 ? "van" : "car"
+    });
+    drive.spawnIn = Math.max(0.62, 1.85 - drive.speed / 300 + Math.random() * 0.55);
+  }
+  drive.traffic.forEach(car => { car.depth += dt * (0.12 + drive.speed / 900); });
+
+  const impact = drive.speed > 34
+    ? drive.traffic.find(car => !car.hit && car.depth > 0.78 && car.depth < 0.94 && Math.abs(car.lane - drive.lane) < 0.27)
+    : null;
+  if (impact) {
+    impact.hit = true;
+    drive.damage += 1;
+    drive.speed = Math.max(26, drive.speed * 0.48);
+    drive.score = Math.max(0, drive.score - 30);
+    drive.shake = 0.42;
+    drive.traffic = drive.traffic.filter(car => !car.hit);
+    showToast("Impact detected · " + (3 - drive.damage) + " vehicle condition points left.");
+    if (drive.damage >= 3) {
+      renderDrive();
+      endDrive();
+      return;
+    }
+  } else {
+    for (const car of drive.traffic) {
+      if (!car.passed && car.depth >= 0.94) {
+        car.passed = true;
+        const separation = Math.abs(car.lane - drive.lane);
+        if (separation >= 0.27 && separation < 0.5) {
+          drive.nearMisses += 1;
+          drive.combo += 1;
+          drive.score += 90 + Math.min(10, drive.combo) * 5;
+          drive.nitro = Math.min(100, drive.nitro + 10);
+          showToast("Near miss +" + (90 + Math.min(10, drive.combo) * 5) + " · nitro recharged");
+        } else if (separation >= 0.5) {
+          drive.combo = 0;
+        }
+      }
+    }
+  }
+  drive.traffic = drive.traffic.filter(car => car.depth < 1.08);
+  renderDrive();
+  updateDriveAudio();
+  requestAnimationFrame(driveFrame);
+}
+
 function calibrateDriveSteering() {
   if (!driveSteering) { showToast("Enable the camera first so AirHand can load two-hand tracking."); return; }
   const hands = lastHandLandmarks;
