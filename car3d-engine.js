@@ -81,6 +81,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   let carColour = "#28bfea";
   let speed = 0, score = 0, best = 0, damage = 0, nearMisses = 0, nitro = 100;
   let laps = 0, trackSampleIndex = 0, previousCarPosition = null;
+  let steeringResponse = 0;
   let hitCooldown = 0;
   let offRoad = false;
   let lastTelemetryAt = 0;
@@ -470,7 +471,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       const p = trackCurve.getPointAt(t);
       const tangent = trackCurve.getTangentAt(t).normalize();
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
-      const side = i % 2 ? 1.8 : -1.8;
+      const side = [-3.8, 0, 3.8][i % 3];
       p.addScaledVector(normal, side);
       const yaw = Math.atan2(-tangent.x, -tangent.z);
       const model = makeCarModel(trafficColours[i % trafficColours.length]);
@@ -481,7 +482,10 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         .setTranslation(p.x, 0.9, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }));
       const collider = RAPIER.ColliderDesc.cuboid(0.94, 0.35, 1.8).setFriction(0.8).setRestitution(0.05);
       world.createCollider(collider, body);
-      traffic.push({ model, body, t, lane: side, cruiseSpeed: 5.5 + (i % 4) * 1.8, hit: false, passed: false, previousRelativeZ: null });
+      traffic.push({
+        model, body, t, lane: side, homeLane: side, laneTarget: side, laneCooldown: 0,
+        cruiseSpeed: 5.5 + (i % 4) * 1.8, hit: false, passed: false, previousRelativeZ: null
+      });
     }
   }
   buildTraffic();
@@ -540,7 +544,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     if (frameId) cancelAnimationFrame(frameId);
     frameId = 0;
     speed = 0; score = 0; damage = 0; nearMisses = 0; nitro = 100; laps = 0; trackSampleIndex = 0;
-    hitCooldown = 0; offRoad = false; accumulator = 0; controls = { steer: 0, throttle: false, brake: false, boost: false };
+    hitCooldown = 0; offRoad = false; accumulator = 0; steeringResponse = 0;
+    controls = { steer: 0, throttle: false, brake: false, boost: false };
     const startPoint = trackCurve.getPointAt(0);
     previousCarPosition = { x: startPoint.x, z: startPoint.z };
     carBody.setTranslation({ x: startPoint.x, y: 0.9, z: startPoint.z }, true);
@@ -551,6 +556,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     carBody.setRotation({ x: 0, y: Math.sin(startYaw / 2), z: 0, w: Math.cos(startYaw / 2) }, true);
     traffic.forEach((item, i) => {
       item.hit = false; item.passed = false; item.previousRelativeZ = null;
+      item.lane = item.homeLane; item.laneTarget = item.homeLane; item.laneCooldown = 0;
       const t = (0.07 + i * 0.071) % 1;
       item.t = t;
       const p = trackCurve.getPointAt(t);
@@ -596,6 +602,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const boostActive = controls.boost && nitro > 0 && !controls.brake;
     if (boostActive) nitro = Math.max(0, nitro - dt * 28);
     else nitro = Math.min(100, nitro + dt * 7.5);
+    steeringResponse += (controls.steer - steeringResponse) * (1 - Math.exp(-dt * 7.5));
     const speedLimit = boostActive ? 68 : maxSpeed;
     const speedHeadroom = clamp((speedLimit - longitudinalSpeed) / 7, 0, 1);
     const power = controls.throttle ? 6400 * speedHeadroom : 0;
@@ -604,8 +611,10 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     if (engineForce > 0 && !controls.brake) {
       carBody.addForceAtPoint(scale(forward, engineForce * surfaceGrip), add(pos, rotateLocal({ x: 0, y: -0.55, z: 0.72 }, rot)), true);
     }
-    if (controls.brake) {
-      carBody.addForceAtPoint(scale(forward, -Math.sign(longitudinalSpeed || 1) * Math.min(10000, 3200 + Math.abs(longitudinalSpeed) * 190)), add(pos, rotateLocal({ x: 0, y: -0.55, z: 0.65 }, rot)), true);
+    if (controls.brake && Math.abs(longitudinalSpeed) > 0.15) {
+      // Predictable, capped braking force with no artificial pitch torque.
+      const brakingForce = Math.min(9200, 5200 + Math.abs(longitudinalSpeed) * 85);
+      carBody.addForce(scale(forward, -Math.sign(longitudinalSpeed) * brakingForce), true);
     }
     // Raycast contact points provide tyre grip only. Vertical stability comes from
     // the low-mounted chassis collider contacting the road, not spring forces that
@@ -625,7 +634,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       };
       let wheelForward = forward;
       if (wheel.front) {
-        const steerYaw = -controls.steer * 0.48;
+        const steerYaw = -steeringResponse * 0.48;
         const steerQuat = { x: 0, y: Math.sin(steerYaw / 2), z: 0, w: Math.cos(steerYaw / 2) };
         wheelForward = normalise(rotateLocal(forward, steerQuat));
       }
@@ -643,8 +652,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     // tapers at high speed so a full-lock gesture cannot spin the car instantly.
     const steerAuthority = clamp(1 - Math.abs(longitudinalSpeed) / 78, 0.38, 1);
     const targetYawRate = -Math.sign(longitudinalSpeed || 1) *
-      clamp(Math.abs(longitudinalSpeed) * Math.tan(Math.abs(controls.steer) * 0.48) / 2.7 * steerAuthority, 0, 1.35) *
-      Math.sign(controls.steer);
+      clamp(Math.abs(longitudinalSpeed) * Math.tan(Math.abs(steeringResponse) * 0.48) / 2.7 * steerAuthority, 0, 1.35) *
+      Math.sign(steeringResponse);
     carBody.applyTorqueImpulse({ x: 0, y: (targetYawRate - ang.y) * 1.8 * dt * 620, z: 0 }, true);
 
     // Rolling resistance and aerodynamic drag oppose motion instead of applying
@@ -693,15 +702,82 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     previousCarPosition = { x: position.x, z: position.z };
   }
 
+  function getDifficulty() {
+    // Gradual, bounded ramp: each distance milestone and completed lap adds a
+    // small challenge increase without suddenly making traffic impossibly fast.
+    return clamp(1 + Math.floor(score / 1800) * 0.05 + laps * 0.04, 1, 1.4);
+  }
+
   function advanceTraffic(dt) {
     const totalLength = trackCurve.getLength();
+    const playerPosition = carBody.translation();
+    const playerVelocity = carBody.linvel();
+    const playerSpeed = Math.hypot(playerVelocity.x, playerVelocity.z);
+    const playerT = trackSampleIndex / trackSamples.length;
+    const trackCenter = trackSamples[trackSampleIndex] || trackCurve.getPointAt(playerT);
+    const trackTangent = trackCurve.getTangentAt(playerT).normalize();
+    const trackNormal = new THREE.Vector3(-trackTangent.z, 0, trackTangent.x);
+    const playerLaneOffset = (playerPosition.x - trackCenter.x) * trackNormal.x +
+      (playerPosition.z - trackCenter.z) * trackNormal.z;
+    const difficulty = getDifficulty();
+    const laneChoices = [-3.8, 0, 3.8];
+
     for (const item of traffic) {
-      item.t = (item.t + item.cruiseSpeed * dt / totalLength) % 1;
+      item.laneCooldown = Math.max(0, item.laneCooldown - dt);
+      const gapToPlayer = ((item.t - playerT + 1) % 1) * totalLength;
+      const playerClosing = gapToPlayer > 4 && gapToPlayer < 34 &&
+        playerSpeed > item.cruiseSpeed * difficulty + 2.5 &&
+        Math.abs(item.lane - playerLaneOffset) < 2.45;
+
+      // Traffic also changes lanes to avoid a slower vehicle in its own lane.
+      let blockedAhead = false;
+      for (const other of traffic) {
+        if (other === item) continue;
+        const gapAhead = ((other.t - item.t + 1) % 1) * totalLength;
+        if (gapAhead > 2 && gapAhead < 18 &&
+            Math.abs(other.lane - item.lane) < 2.25 &&
+            other.cruiseSpeed < item.cruiseSpeed + 1.5) {
+          blockedAhead = true;
+          break;
+        }
+      }
+
+      if (item.laneCooldown <= 0 && (playerClosing || blockedAhead)) {
+        let bestLane = item.laneTarget;
+        let bestPenalty = Infinity;
+        for (const candidate of laneChoices) {
+          if (Math.abs(candidate - item.lane) < 1.0) continue;
+          let penalty = 0;
+          for (const other of traffic) {
+            if (other === item) continue;
+            const along = ((other.t - item.t + 1) % 1) * totalLength;
+            const separation = Math.min(along, totalLength - along);
+            if (separation < 19 && Math.abs(other.lane - candidate) < 2.3) penalty += 100;
+          }
+          if (playerClosing && gapToPlayer < 27 &&
+              Math.abs(candidate - playerLaneOffset) < 2.35) penalty += 80;
+          if (Math.abs(candidate - item.homeLane) > 0.1) penalty += 0.15;
+          if (penalty < bestPenalty) { bestPenalty = penalty; bestLane = candidate; }
+        }
+        if (bestLane !== item.laneTarget) {
+          item.laneTarget = bestLane;
+          item.laneCooldown = playerClosing ? 2.2 : 1.8;
+        }
+      } else if (item.laneCooldown <= 0 && !playerClosing && !blockedAhead &&
+                 Math.abs(item.laneTarget - item.homeLane) > 0.1) {
+        item.laneTarget = item.homeLane;
+        item.laneCooldown = 1.8;
+      }
+
+      // Smooth lane transitions; never teleport traffic sideways between lanes.
+      item.lane += clamp(item.laneTarget - item.lane, -2.2 * dt, 2.2 * dt);
+      item.t = (item.t + item.cruiseSpeed * difficulty * dt / totalLength) % 1;
       const p = trackCurve.getPointAt(item.t);
       const tangent = trackCurve.getTangentAt(item.t).normalize();
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
       p.addScaledVector(normal, item.lane);
-      const yaw = Math.atan2(-tangent.x, -tangent.z);
+      const laneMotion = item.laneTarget - item.lane;
+      const yaw = Math.atan2(-tangent.x, -tangent.z) + clamp(laneMotion * 0.025, -0.08, 0.08);
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
       item.body.setNextKinematicTranslation({ x: p.x, y: 0.9, z: p.z });
       item.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
@@ -768,7 +844,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const p = carBody.translation(), q = carBody.rotation();
     carRoot.position.set(p.x, p.y - 0.55, p.z);
     carRoot.quaternion.set(q.x, q.y, q.z, q.w);
-    const steeringAngle = -controls.steer * 0.48;
+    const steeringAngle = -steeringResponse * 0.48;
     allWheels.forEach(w => {
       w.wheel.rotation.x += speed * 0.0008;
       w.rim.rotation.x += speed * 0.0008;
@@ -792,7 +868,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     lastTelemetryAt = now;
     if (callbacks.onTelemetry) callbacks.onTelemetry({
       speed: Math.round(speed), score: Math.floor(score), best: Math.max(best, Math.floor(score)),
-      damage, nearMisses, laps, nitro: Math.round(nitro), steer: controls.steer,
+      damage, nearMisses, laps, nitro: Math.round(nitro), steer: steeringResponse,
+      difficulty: Math.round(getDifficulty() * 100) / 100,
       surface: offRoad ? "OFF ROAD" : controls.brake ? "BRAKE" : controls.boost && nitro > 0 ? "BOOST" : controls.steer < -0.15 ? "LEFT" : controls.steer > 0.15 ? "RIGHT" : "CENTER",
       fps: Math.round(1000 / Math.max(1, frameAverageMs)),
       pixelRatio: renderer.getPixelRatio(),
@@ -968,7 +1045,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   renderer.render(scene, camera);
   return {
     start, pause, resume, reset, setControls, setScene, setCarColour, setGraphicsMode,
-    getTelemetry: () => ({ speed, score, best, damage, nearMisses, nitro, offRoad }),
+    getTelemetry: () => ({ speed, score, best, damage, nearMisses, laps, nitro, offRoad, difficulty: getDifficulty() }),
     dispose
   };
 }
