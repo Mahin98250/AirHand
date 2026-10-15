@@ -46,7 +46,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v9/);
+  assert.match(worker, /airhand-shell-v10/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -75,7 +75,7 @@ test("Ultra rendering mode remains adaptive and repeated scenery uses instancing
   assert.match(engine, /qualityMode === "ultra"/);
   assert.match(engine, /new THREE\.InstancedMesh\(railGeo/);
   assert.match(engine, /new THREE\.InstancedMesh\(dashGeo/);
-  assert.match(engine, /new THREE\.InstancedMesh\(trunkGeo/);
+  assert.match(engine, /new THREE\.InstancedMesh\(trunkGeo/);\n  assert.match(engine, /new THREE\.InstancedMesh\(hillGeo/);\n  assert.match(engine, /const grain = 176 \+ Math\.random\(\) \* 48/);
   assert.match(app, /drive3dInstance\.setGraphicsMode/);
   assert.match(html, /id="driveGraphics"/);
 });
