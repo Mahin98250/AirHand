@@ -34,9 +34,12 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   const renderer = new THREE.WebGLRenderer({
     canvas, antialias: true, alpha: false, powerPreference: "high-performance"
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+  const mobileGPU = matchMedia("(max-width: 760px)").matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
+  const maxPixelRatio = mobileGPU ? 1.25 : 1.75;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.info.autoReset = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
@@ -52,7 +55,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   const sun = new THREE.DirectionalLight(0xffedcf, 3.0);
   sun.position.set(-45, 75, 25);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(mobileGPU ? 768 : 1536, mobileGPU ? 768 : 1536);
   sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
   sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
   sun.shadow.normalBias = 0.035;
@@ -102,7 +105,28 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     return m;
   }
   const groundMat = material(0x47794b);
-  const asphaltMat = material(0x303943, 0.92);
+  const asphaltMat = material(0xffffff, 0.82);
+  // Generate a subtle asphalt microtexture locally: no texture download or API needed.
+  const asphaltCanvas = document.createElement("canvas");
+  asphaltCanvas.width = 256; asphaltCanvas.height = 1024;
+  const asphaltContext = asphaltCanvas.getContext("2d", { alpha: false });
+  const asphaltPixels = asphaltContext.createImageData(asphaltCanvas.width, asphaltCanvas.height);
+  for (let i = 0; i < asphaltPixels.data.length; i += 4) {
+    const grain = 48 + Math.random() * 30;
+    asphaltPixels.data[i] = grain;
+    asphaltPixels.data[i + 1] = grain + 2;
+    asphaltPixels.data[i + 2] = grain + 5;
+    asphaltPixels.data[i + 3] = 255;
+  }
+  asphaltContext.putImageData(asphaltPixels, 0, 0);
+  for (let i = 0; i < 42; i++) {
+    asphaltContext.fillStyle = i % 3 ? "rgba(220,230,236,.06)" : "rgba(0,0,0,.10)";
+    asphaltContext.fillRect(Math.random() * 256, Math.random() * 1024, 1 + Math.random() * 2, 3 + Math.random() * 18);
+  }
+  const asphaltTexture = new THREE.CanvasTexture(asphaltCanvas);
+  asphaltTexture.wrapS = THREE.RepeatWrapping; asphaltTexture.wrapT = THREE.RepeatWrapping;
+  asphaltTexture.repeat.set(1, 1); asphaltTexture.colorSpace = THREE.SRGBColorSpace;
+  asphaltMat.map = asphaltTexture; asphaltMat.needsUpdate = true;
   const laneMat = material(0xe6e8e9, 0.65);
   const railMat = material(0xd9e1e9, 0.48, 0.45);
   const darkRailMat = material(0x354552, 0.62, 0.25);
@@ -159,6 +183,13 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   roadGeo.computeVertexNormals();
   const road = mesh(roadGeo, asphaltMat);
   road.receiveShadow = true;
+  // The visible asphalt is also a real collision surface; the broad ground plane
+  // remains the recovery surface when the player leaves the circuit.
+  const roadBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+  const roadCollider = RAPIER.ColliderDesc.trimesh(new Float32Array(roadPositions), new Uint32Array(roadIndices))
+    .setFriction(1.15).setRestitution(0.015);
+  world.createCollider(roadCollider, roadBody);
+  fixedBodies.push(roadBody);
 
   // Outer/inner edge strips, reflectors and physics guardrails.
   const railGeo = geometry(new THREE.BoxGeometry(1, 0.42, 1));
@@ -548,6 +579,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       paused
     });
   }
+  let frameAverageMs = 16.7;
+  let qualityCheckAt = 0;
   function resize() {
     if (disposed) return;
     const width = Math.max(1, canvas.clientWidth || canvas.parentElement?.clientWidth || 800);
@@ -556,11 +589,24 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
   }
+  function adaptQuality(now, frameMs) {
+    frameAverageMs += (frameMs - frameAverageMs) * 0.06;
+    if (now - qualityCheckAt < 1800) return;
+    qualityCheckAt = now;
+    const current = renderer.getPixelRatio();
+    const target = frameAverageMs > 23 ? Math.max(0.85, current - 0.15) : frameAverageMs < 15 ? Math.min(maxPixelRatio, current + 0.05) : current;
+    if (Math.abs(target - current) > 0.02) {
+      renderer.setPixelRatio(target);
+      resize();
+    }
+  }
   function frame(now) {
     if (disposed) return;
     frameId = requestAnimationFrame(frame);
-    const dt = Math.min(0.05, Math.max(0, (now - (lastFrame || now)) / 1000));
+    const frameMs = lastFrame ? now - lastFrame : 16.7;
+    const dt = Math.min(0.05, Math.max(0, frameMs / 1000));
     lastFrame = now;
+    adaptQuality(now, frameMs);
     if (running && !paused) {
       accumulator = Math.min(accumulator + dt, fixedStep * 5);
       let steps = 0;
@@ -592,6 +638,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     if (frameId) cancelAnimationFrame(frameId);
     window.removeEventListener("resize", resize);
     renderer.dispose();
+    asphaltTexture.dispose();
     world.free();
     for (const g of disposableGeometries) g.dispose();
     for (const m of disposableMaterials) m.dispose();
