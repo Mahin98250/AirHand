@@ -17,13 +17,15 @@ test("AirHand declares an installable web app manifest", async () => {
 
 test("AirHand caches the same-origin app shell without caching camera frames or third-party models", async () => {
   const worker = await read("../sw.js");
-  assert.match(worker, /airhand-shell-v2/);
+  assert.match(worker, /airhand-shell-v\d+/);
   assert.match(worker, /"\.\/index\.html"/);
   assert.match(worker, /"\.\/android-guide\.html"/);
-  assert.match(worker, /"\.\/app\.js\?v=airhand-20261014-26"/);
+  assert.match(worker, /"\.\/app\.js\?v=airhand-[^"]+"/);
   assert.match(worker, /request\.mode === "navigate"/);
   assert.match(worker, /if \(url\.origin !== self\.location\.origin\) return/);
-  assert.doesNotMatch(worker, /getUserMedia|MediaStream|storage\.googleapis\.com|jsdelivr\.net/);
+  assert.doesNotMatch(worker, /getUserMedia|MediaStream|storage\.googleapis\.com/);
+  assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
+  assert.match(worker, /is3DDependency/);
 });
 
 test("install controls and service worker registration are wired", async () => {
