@@ -102,7 +102,8 @@ test("3D car spawn uses a low-contact collider and cannot spring-launch at start
   assert.match(engine, /const tireLoad = staticWheelLoad \* 0\.25/);
   assert.doesNotMatch(engine, /const restLength = 0\.39, spring = 22000, damper = 3200/);
   assert.doesNotMatch(engine, /addForceAtPoint\(\{ x: 0, y: springForce, z: 0 \}/);
-  assert.match(engine, /const impactImpulse = clamp\(closingSpeed \* carBody\.mass\(\) \* 0\.1, 120, 1600\)/);
+  assert.match(engine, /const relativeImpactSpeed = Math\.hypot\(relativeVelocity\.x, relativeVelocity\.z\)/);
+  assert.match(engine, /const impactImpulse = clamp\(relativeImpactSpeed \* carBody\.mass\(\) \* 0\.1, 120, 1600\)/);
   assert.match(engine, /const overlapping = Math\.abs\(relativePosition\.x\) < 1\.72 && Math\.abs\(relativePosition\.z\) < 3\.45/);
 });
 
@@ -240,7 +241,7 @@ test("traffic changes only into a clear lane and waits when every lane is occupi
   assert.equal(chooseSafeTrafficLane({ ...base, traffic: trafficWithMiddleBlocked }), 3.8);
   const allAlternativesBlocked = [
     ...trafficWithMiddleBlocked,
-    { t: 0.12, lane: 3.8, laneTarget: 3.8, homeLane: 3.8 }
+    { t: 0.114, lane: 3.8, laneTarget: 3.8, homeLane: 3.8 }
   ];
   assert.equal(chooseSafeTrafficLane({ ...base, traffic: allAlternativesBlocked }), null);
 });
