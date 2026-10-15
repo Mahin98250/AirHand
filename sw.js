@@ -1,9 +1,9 @@
-const CACHE_NAME = "airhand-shell-v6";
+const CACHE_NAME = "airhand-shell-v7";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./android-guide.html",
-  "./app.js?v=airhand-20261015-3d-1",
+  "./app.js?v=airhand-20261015-3d-2",
   "./car3d-engine.js",
   "./pwa.js?v=airhand-pwa-2",
   "./manifest.webmanifest",
