@@ -46,7 +46,7 @@ Air Drive includes two driving modes: a lightweight Canvas arcade mode and a 3D 
 
 - **Auto · Smooth** balances device pixel ratio and frame time for the current screen and GPU.
 - **Ultra · 4K-ready** requests a higher render resolution on capable devices. Native 4K is not guaranteed: physical display resolution, browser device-pixel ratio, GPU memory and frame time set the real limit.
-- Repeated trees, lane markings, hills and guardrails use instanced rendering to reduce draw calls. The 3D renderer adapts resolution downward if frame times rise. On mobile, shadow quality can drop temporarily when frame time stays high and restore after performance stabilizes. The HUD reports estimated FPS and render scale so device tuning is visible.
+- Repeated trees, lane markings, hills and guardrails use instanced rendering to reduce draw calls. Wheel descriptors and camera target vectors are reused to reduce short-lived allocations during the physics/render loop. Each new run now snaps the follow camera to the car immediately, and start re-applies the grounded pose before the first animation frame. The 3D renderer adapts resolution downward if frame times rise. On mobile, shadow quality can drop temporarily when frame time stays high and restore after performance stabilizes. The HUD reports estimated FPS and render scale so device tuning is visible.
 - The 3D car uses a low-mounted collision body and an arcade road-plane stabilizer: after each physics step it preserves horizontal movement and yaw while clamping vertical position/velocity and pitch/roll. Raycast points provide tyre grip without vertical spring impulses. This still needs physical testing across browsers and devices.
 
 ## Run it
