@@ -12,7 +12,7 @@ AirHand is a mobile-friendly browser app that turns webcam hand movements into a
 - **Live framing guidance** tells you when your hand is near the frame edge or too close/small.
 - **Hand Runner arcade mode:** increasingly difficult obstacles, floating collectible stars, combo multipliers, bonus points, personal best, three pace settings and optional sound effects.
 - **Air Drive:** perspective road rendering with four selectable environments, custom car paint, two-hand steering, touch and keyboard controls, cruise/manual throttle, nitro boost, optional generated engine audio, near-miss rewards, three-hit vehicle damage, and a saved personal-best score.
-- **Air Drive 3D:** Three.js rendering with a Rapier rigid-body physics world, raycast wheel suspension, spring/damper forces, tyre grip, steering torque, road barriers, moving AI traffic, physical vehicle collisions, camera follow, and gesture-controlled acceleration, braking and nitro.
+- **Air Drive 3D:** Three.js rendering with a Rapier rigid-body physics world, stable low-mounted chassis collision, raycast tyre grip, steering torque, road barriers, moving AI traffic, physical vehicle collisions, camera follow, and gesture-controlled acceleration, braking and nitro.
 - **Mobile friendly inputs:** gesture control, tap/click and keyboard fallbacks, plus camera stop, mirror preview, landmarks and cursor response settings.
 - Camera frames and gesture inference stay in the browser; there is no video upload or app backend.
 
@@ -31,7 +31,7 @@ Source code: https://github.com/Mahin98250/AirHand
 - **Driving feedback:** pass close to traffic for near-miss bonuses and nitro recharge. Three impacts end the session; resetting starts a fresh run.
 - **Pause and sound:** use P or the pause control, and enable the optional synthesised engine sound from the cockpit controls.
 
-Air Drive includes two driving modes: a lightweight Canvas arcade mode and a 3D mode backed by Three.js and the Rapier physics engine. The 3D mode simulates a rigid-body chassis, raycast suspension, spring/damper forces, tyre grip, steering torque, road barriers and physical traffic collisions. It is a browser-based game prototype, not a licensed vehicle simulator.
+Air Drive includes two driving modes: a lightweight Canvas arcade mode and a 3D mode backed by Three.js and the Rapier physics engine. The 3D mode simulates a rigid-body chassis with a low-mounted road-contact collider, raycast tyre grip, steering torque, road barriers and physical traffic collisions. It is a browser-based game prototype, not a licensed vehicle simulator.
 
 ### 3D gesture controls
 
@@ -47,7 +47,7 @@ Air Drive includes two driving modes: a lightweight Canvas arcade mode and a 3D 
 - **Auto · Smooth** balances device pixel ratio and frame time for the current screen and GPU.
 - **Ultra · 4K-ready** requests a higher render resolution on capable devices. Native 4K is not guaranteed: physical display resolution, browser device-pixel ratio, GPU memory and frame time set the real limit.
 - Repeated trees, lane markings, hills and guardrails use instanced rendering to reduce draw calls. The 3D renderer adapts resolution downward if frame times rise. On mobile, shadow quality can drop temporarily when frame time stays high and restore after performance stabilizes. The HUD reports estimated FPS and render scale so device tuning is visible.
-- The vehicle suspension uses a mass-based static spring preload and a more realistic chassis mass to avoid the old no-load drop and hard upward spring kick. It still needs physical testing across browsers and devices.
+- The 3D car uses a low-mounted collision body for stable road contact; raycast points provide tyre grip without vertical spring impulses that could launch the car. This change still needs physical testing across browsers and devices.
 
 ## Run it
 
