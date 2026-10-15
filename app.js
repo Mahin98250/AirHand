@@ -237,6 +237,7 @@ let mediaStream = null;
 let cameraActive = false;
 let trackingFrame = 0;
 let gameFrameRequest = 0;
+let driveFrameRequest = 0;
 let lastVideoTime = -1;
 let lastHandSeenAt = 0;
 let lastHandLandmarks = null;
@@ -1364,6 +1365,8 @@ function updateDriveAudio() {
 function pauseDrive() {
   if (!drive.playing || drive.paused) return;
   drive.paused = true;
+  if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
+  driveFrameRequest = 0;
   drive.throttle = false;
   drive.boosting = false;
   $("drivePause").textContent = "▶ Resume";
@@ -1375,6 +1378,8 @@ function pauseDrive() {
 }
 function resumeDrive() {
   if (!drive.playing || !drive.paused) return;
+  if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
+  driveFrameRequest = 0;
   drive.paused = false;
   drive.lastFrame = 0;
   $("driveOverlay").classList.add("hidden");
@@ -1383,6 +1388,8 @@ function resumeDrive() {
   requestAnimationFrame(driveFrame);
 }
 function startDrive() {
+  if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
+  driveFrameRequest = 0;
   drive.playing = true;
   drive.paused = false;
   drive.crashed = false;
@@ -1407,11 +1414,13 @@ function startDrive() {
   $("driveOverlay").classList.add("hidden");
   renderDrive();
   updateDriveAudio();
-  requestAnimationFrame(driveFrame);
+  driveFrameRequest = requestAnimationFrame(driveFrame);
 }
 function endDrive() {
   drive.playing = false;
   drive.paused = false;
+  if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
+  driveFrameRequest = 0;
   drive.crashed = true;
   drive.braking = false;
   drive.throttle = false;
@@ -1507,7 +1516,7 @@ function driveFrame(now) {
   drive.traffic = drive.traffic.filter(car => car.depth < 1.08);
   renderDrive();
   updateDriveAudio();
-  requestAnimationFrame(driveFrame);
+  driveFrameRequest = requestAnimationFrame(driveFrame);
 }
 
 function calibrateDriveSteering() {
