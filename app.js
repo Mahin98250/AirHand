@@ -1511,6 +1511,7 @@ function saveDriveBest() {
 function pauseDrive() {
   if (!drive.playing || drive.paused) return;
   drive.paused = true;
+  if (drive3dEnabled && drive3dInstance) drive3dInstance.pause();
   if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
   driveFrameRequest = 0;
   drive.throttle = false;
@@ -1521,6 +1522,7 @@ function pauseDrive() {
   $("drivePlay").textContent = "Resume drive";
   $("driveOverlay").classList.remove("hidden");
   updateDriveAudio();
+  syncDrive3DControls();
 }
 function resumeDrive() {
   if (!drive.playing || !drive.paused) return;
@@ -1531,9 +1533,11 @@ function resumeDrive() {
   $("driveOverlay").classList.add("hidden");
   $("drivePause").textContent = "Ⅱ Pause";
   updateDriveAudio();
+  if (drive3dEnabled && drive3dInstance) drive3dInstance.resume();
+  syncDrive3DControls();
   driveFrameRequest = requestAnimationFrame(driveFrame);
 }
-function startDrive() {
+async function startDrive() {
   saveDriveBest();
   if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
   driveFrameRequest = 0;
@@ -1558,6 +1562,30 @@ function startDrive() {
   $("drivePause").textContent = "Ⅱ Pause";
   $("driveCruise").setAttribute("aria-pressed", String(drive.cruise));
   $("driveCruise").textContent = drive.cruise ? "Cruise control: ON" : "Cruise control: OFF";
+  $("driveCruise").setAttribute("aria-pressed", String(drive.cruise));
+  $("driveCruise").textContent = drive.cruise ? "Cruise control: ON" : "Cruise control: OFF";
+  if (drive3dEnabled) {
+    $("drivePlay").disabled = true;
+    const ready = await ensureDrive3D();
+    $("drivePlay").disabled = false;
+    if (!ready) {
+      drive3dEnabled = false;
+      $("drive3dToggle").setAttribute("aria-pressed", "false");
+      $("drive3dToggle").textContent = "🚗 3D physics: OFF";
+      $("driveCanvas").parentElement.classList.remove("drive-3d-active");
+      startDrive();
+      return;
+    }
+    drive3dInstance.setScene(drive.scene);
+    drive3dInstance.setCarColour(drive.carColor);
+    drive3dInstance.reset();
+    drive3dInstance.start();
+    $("driveOverlay").classList.add("hidden");
+    updateDriveAudio();
+    syncDrive3DControls();
+    driveFrameRequest = requestAnimationFrame(driveFrame);
+    return;
+  }
   $("driveOverlay").classList.add("hidden");
   renderDrive();
   updateDriveAudio();
@@ -1573,6 +1601,8 @@ function endDrive() {
   drive.braking = false;
   drive.throttle = false;
   drive.boosting = false;
+  driveGestureThrottle = false; driveGestureBrake = false; driveGestureBoost = false;
+  if (drive3dEnabled && drive3dInstance) drive3dInstance.pause();
   $("drivePause").textContent = "Ⅱ Pause";
   $("driveTitle").textContent = "Session over · vehicle needs service";
   $("driveText").textContent = "Distance score " + Math.floor(drive.score) + " · Near misses " + drive.nearMisses + " · Damage " + drive.damage + "/3. Reset to take another drive.";
@@ -1582,6 +1612,11 @@ function endDrive() {
 }
 function driveFrame(now) {
   if (!drive.playing || drive.paused || currentMode !== "drive") return;
+  if (drive3dEnabled && drive3dInstance) {
+    syncDrive3DControls();
+    driveFrameRequest = requestAnimationFrame(driveFrame);
+    return;
+  }
   const dt = Math.min(Math.max((now - (drive.lastFrame || now)) / 1000, 0), 0.04);
   drive.lastFrame = now;
 
