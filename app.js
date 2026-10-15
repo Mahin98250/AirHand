@@ -247,7 +247,8 @@ let inferenceErrorSince = 0;
 let fpsFrames = 0;
 let fpsWindowStart = 0;
 let currentMode = "cursor";
-const drive = { playing: false, paused: false, crashed: false, score: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0, braking: false, throttle: false, cruise: true, boosting: false, nitro: 100, damage: 0, nearMisses: 0, combo: 0, shake: 0, scene: "sunset", carColor: "#28bfea", sound: false, audioContext: null, engineOsc: null, engineFilter: null, engineGain: null };
+const drive = { playing: false, paused: false, crashed: false, score: 0, best: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0, braking: false, throttle: false, cruise: true, boosting: false, nitro: 100, damage: 0, nearMisses: 0, combo: 0, shake: 0, scene: "sunset", carColor: "#28bfea", sound: false, audioContext: null, engineOsc: null, engineFilter: null, engineGain: null };
+try { drive.best = Math.max(0, Number(localStorage.getItem("airhand-drive-best")) || 0); } catch { /* storage is optional */ }
 let driveCanvas = null;
 let driveContext = null;
 let lastStableGesture = "None";
@@ -1263,7 +1264,7 @@ function renderDrive() {
     const depth = car.depth, y = horizon + (height - horizon) * depth * depth;
     const road = driveRoadGeometry(width, height, y);
     const x = road.center + car.lane * road.half * 0.62;
-    drawDriveCar(ctx, x, y, 0.12 + depth * 0.9, car.color, 0, false);
+    drawDriveCar(ctx, x, y, (0.12 + depth * 0.9) * (car.type === "van" ? 1.14 : 1), car.color, 0, false);
   }
   // Player car is anchored lower in the scene; lane movement is intentionally strong and visible.
   const playerY = height * 0.875;
@@ -1325,6 +1326,7 @@ function renderDrive() {
   ctx.restore();
   $("driveSpeed").textContent = String(Math.round(drive.speed));
   $("driveScore").textContent = String(Math.floor(drive.score)).padStart(4, "0");
+  const best = $("driveBest"); if (best) best.textContent = String(Math.max(drive.best, Math.floor(drive.score))).padStart(4, "0");
   $("driveSteer").textContent = drive.braking ? "BRAKE" : drive.boosting ? "BOOST" : drive.steer < -.15 ? "LEFT" : drive.steer > .15 ? "RIGHT" : Math.abs(drive.lane) > .74 ? "OFF ROAD" : "CENTER";
   const damage = $("driveDamage"); if (damage) damage.textContent = drive.damage + "/3";
   const misses = $("driveNearMisses"); if (misses) misses.textContent = String(drive.nearMisses);
@@ -1375,6 +1377,12 @@ function updateDriveAudio() {
   if (drive.engineFilter) drive.engineFilter.frequency.setTargetAtTime(300 + drive.speed * 5.5, time, 0.1);
   drive.engineGain.gain.setTargetAtTime(drive.playing && !drive.paused ? 0.012 + drive.speed / 12000 + (drive.boosting ? 0.012 : 0) : 0, time, 0.1);
 }
+function saveDriveBest() {
+  const score = Math.floor(drive.score);
+  if (score <= drive.best) return;
+  drive.best = score;
+  try { localStorage.setItem("airhand-drive-best", String(drive.best)); } catch { /* storage may be disabled */ }
+}
 function pauseDrive() {
   if (!drive.playing || drive.paused) return;
   drive.paused = true;
@@ -1401,6 +1409,7 @@ function resumeDrive() {
   driveFrameRequest = requestAnimationFrame(driveFrame);
 }
 function startDrive() {
+  saveDriveBest();
   if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
   driveFrameRequest = 0;
   drive.playing = true;
@@ -1430,6 +1439,7 @@ function startDrive() {
   driveFrameRequest = requestAnimationFrame(driveFrame);
 }
 function endDrive() {
+  saveDriveBest();
   drive.playing = false;
   drive.paused = false;
   if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
