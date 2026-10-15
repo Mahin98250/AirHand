@@ -36,7 +36,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   });
   const mobileGPU = matchMedia("(max-width: 760px)").matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
   // Desktop can render at high-DPI / 4K-ready resolution; mobile stays conservative.
-  const maxPixelRatio = mobileGPU ? 1.35 : 2.5;
+  const maxPixelRatio = mobileGPU ? 1.5 : 2.5;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -56,7 +56,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   const sun = new THREE.DirectionalLight(0xffedcf, 3.0);
   sun.position.set(-45, 75, 25);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(mobileGPU ? 768 : 1536, mobileGPU ? 768 : 1536);
+  sun.shadow.mapSize.set(mobileGPU ? 512 : 1024, mobileGPU ? 512 : 1024);
   sun.shadow.camera.left = -100; sun.shadow.camera.right = 100;
   sun.shadow.camera.top = 100; sun.shadow.camera.bottom = -100;
   sun.shadow.normalBias = 0.035;
@@ -662,12 +662,18 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       speed: Math.round(speed), score: Math.floor(score), best: Math.max(best, Math.floor(score)),
       damage, nearMisses, nitro: Math.round(nitro), steer: controls.steer,
       surface: offRoad ? "OFF ROAD" : controls.brake ? "BRAKE" : controls.boost && nitro > 0 ? "BOOST" : controls.steer < -0.15 ? "LEFT" : controls.steer > 0.15 ? "RIGHT" : "CENTER",
+      fps: Math.round(1000 / Math.max(1, frameAverageMs)),
+      pixelRatio: renderer.getPixelRatio(),
+      shadowsActive,
       paused
     });
   }
   let frameAverageMs = 16.7;
   let qualityCheckAt = 0;
   let qualityMode = "auto";
+  let slowFrameWindows = 0;
+  let stableFrameWindows = 0;
+  let shadowsActive = true;
   function resize() {
     if (disposed) return;
     const width = Math.max(1, canvas.clientWidth || canvas.parentElement?.clientWidth || 800);
@@ -682,6 +688,17 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       ? maxPixelRatio
       : Math.min(window.devicePixelRatio || 1, maxPixelRatio);
   }
+  function applyShadowQuality() {
+    const size = qualityMode === "ultra" ? (mobileGPU ? 1024 : 2048) : (mobileGPU ? 512 : 1024);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(size, size);
+    sun.shadow.needsUpdate = true;
+    shadowsActive = true;
+    stableFrameWindows = 0;
+    slowFrameWindows = 0;
+  }
   function setGraphicsMode(mode = "auto") {
     qualityMode = mode === "ultra" ? "ultra" : "auto";
     frameAverageMs = 16.7;
@@ -690,8 +707,9 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       ? (mobileGPU ? Math.min(maxPixelRatio, Math.max(nativeRatio, 1.2)) : maxPixelRatio)
       : Math.min(nativeRatio, maxPixelRatio);
     renderer.setPixelRatio(requested);
+    applyShadowQuality();
     resize();
-    if (callbacks.onGraphicsMode) callbacks.onGraphicsMode(qualityMode, renderer.getPixelRatio());
+    if (callbacks.onGraphicsMode) callbacks.onGraphicsMode(qualityMode, renderer.getPixelRatio(), shadowsActive);
   }
   function adaptQuality(now, frameMs) {
     frameAverageMs += (frameMs - frameAverageMs) * 0.06;
@@ -705,6 +723,26 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     if (Math.abs(target - current) > 0.02) {
       renderer.setPixelRatio(target);
       resize();
+    }
+    if (frameAverageMs > 24) {
+      slowFrameWindows++;
+      stableFrameWindows = 0;
+      if (mobileGPU && shadowsActive && slowFrameWindows >= 2) {
+        renderer.shadowMap.enabled = false;
+        sun.castShadow = false;
+        shadowsActive = false;
+        if (callbacks.onGraphicsMode) callbacks.onGraphicsMode(qualityMode, renderer.getPixelRatio(), shadowsActive);
+      }
+    } else if (frameAverageMs < 17.2) {
+      stableFrameWindows++;
+      slowFrameWindows = 0;
+      if (mobileGPU && !shadowsActive && stableFrameWindows >= 3) {
+        applyShadowQuality();
+        if (callbacks.onGraphicsMode) callbacks.onGraphicsMode(qualityMode, renderer.getPixelRatio(), shadowsActive);
+      }
+    } else {
+      slowFrameWindows = 0;
+      stableFrameWindows = 0;
     }
   }
   function frame(now) {
