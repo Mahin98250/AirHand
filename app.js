@@ -946,6 +946,13 @@ function activateVirtualTarget() {
 }
 
 function switchMode(mode) {
+  if (currentMode === "drive" && mode !== "drive") {
+    drive.playing = false;
+    drive.paused = false;
+    if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
+    driveFrameRequest = 0;
+    updateDriveAudio();
+  }
   if (currentMode !== mode) cancelVirtualDrag("Mode changed");
   resetDwellProgress();
   currentMode = mode;
@@ -974,6 +981,12 @@ function switchMode(mode) {
     drive.playing = false;
     if (driveSteering) driveSteering.reset();
     drive.steer = 0;
+    $("drivePause").textContent = "Ⅱ Pause";
+    $("driveTitle").textContent = "Ready to drive?";
+    $("driveText").textContent = "Choose a scene, then start the engine. Cruise control is on by default; you can switch to manual throttle.";
+    $("drivePlay").textContent = "Start engine";
+    $("driveOverlay").classList.remove("hidden");
+    updateDriveAudio();
     fitDriveCanvas();
     renderDrive();
   }
@@ -1385,7 +1398,7 @@ function resumeDrive() {
   $("driveOverlay").classList.add("hidden");
   $("drivePause").textContent = "Ⅱ Pause";
   updateDriveAudio();
-  requestAnimationFrame(driveFrame);
+  driveFrameRequest = requestAnimationFrame(driveFrame);
 }
 function startDrive() {
   if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
@@ -2000,6 +2013,7 @@ window.addEventListener("pagehide", () => {
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && game.playing && !game.paused) pauseGame(true);
+  if (document.hidden && currentMode === "drive" && drive.playing && !drive.paused) pauseDrive();
 });
 updateCameraUI(false);
 resizeCanvases();
