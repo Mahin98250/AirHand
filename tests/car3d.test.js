@@ -63,6 +63,14 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
 });
 
 
+test("arcade physics locks vertical position and pitch/roll after each physics step", () => {
+  assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*updateTrafficAndCollisions\(\)/);
+  assert.match(engine, /function keepCarGrounded\(\)[\s\S]*?setTranslation\(\{ x: position\.x, y: 0\.9, z: position\.z \}, true\)/);
+  assert.match(engine, /setLinvel\(\{ x: velocity\.x, y: 0, z: velocity\.z \}, true\)/);
+  assert.match(engine, /setRotation\(\{ x: 0, y: Math\.sin\(yaw \/ 2\), z: 0, w: Math\.cos\(yaw \/ 2\) \}, true\)/);
+  assert.match(engine, /setAngvel\(\{ x: 0, y: angular\.y, z: 0 \}, true\)/);
+});
+
 test("3D car spawn uses a low-contact collider and cannot spring-launch at startup", () => {
   assert.match(engine, /ColliderDesc\.cuboid\(0\.9, 0\.32, 1\.82\)[\s\S]*?\.setTranslation\(0, -0\.55, 0\)/);
   assert.match(engine, /\.setDensity\(330\)\.setFriction\(1\.15\)\.setRestitution\(0\)/);
