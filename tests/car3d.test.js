@@ -75,7 +75,9 @@ test("Ultra rendering mode remains adaptive and repeated scenery uses instancing
   assert.match(engine, /qualityMode === "ultra"/);
   assert.match(engine, /new THREE\.InstancedMesh\(railGeo/);
   assert.match(engine, /new THREE\.InstancedMesh\(dashGeo/);
-  assert.match(engine, /new THREE\.InstancedMesh\(trunkGeo/);\n  assert.match(engine, /new THREE\.InstancedMesh\(hillGeo/);\n  assert.match(engine, /const grain = 176 \+ Math\.random\(\) \* 48/);
+  assert.match(engine, /new THREE\.InstancedMesh\(trunkGeo/);
+  assert.match(engine, /new THREE\.InstancedMesh\(hillGeo/);
+  assert.match(engine, /const grain = 176 \+ Math\.random\(\) \* 48/);
   assert.match(app, /drive3dInstance\.setGraphicsMode/);
   assert.match(html, /id="driveGraphics"/);
 });
