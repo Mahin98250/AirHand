@@ -160,3 +160,7 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 - Automated tests cover steering calibration, rotation response, close-hand rejection and missing-hand behavior.
 
 **Important validation limit:** the steering math and game loop have automated coverage, but camera-driven steering accuracy, left/right direction on mirrored camera previews, and real-device performance still need physical testing. This is a first playable prototype; no real-world accuracy claim is made.
+
+
+### Air Drive gameplay logic
+The 3D drive uses speed-limited throttle and nitro, speed-sensitive bicycle-model steering, rolling/aerodynamic drag, and stronger off-road resistance. Score follows actual distance moved; laps are counted only when the car crosses the start/finish portion of the circuit in the forward direction. Traffic impacts use player-relative oriented overlap and closing speed, while near-miss rewards require passing a vehicle with a narrow lateral gap instead of merely being nearby.
