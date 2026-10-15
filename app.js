@@ -1437,7 +1437,7 @@ async function ensureDrive3D() {
         showToast("Collision · " + data.remaining + " vehicle condition points remaining.");
       },
       onNearMiss(data) {
-        showToast("Near miss +" + (data.score - Math.floor(drive.score)) + " · nitro recharged");
+        showToast("Near miss bonus · nitro recharged");
       },
       onGameOver(data) {
         drive.score = data.score;
@@ -1568,8 +1568,6 @@ async function startDrive() {
   drive.combo = 0;
   drive.shake = 0;
   $("drivePause").textContent = "Ⅱ Pause";
-  $("driveCruise").setAttribute("aria-pressed", String(drive.cruise));
-  $("driveCruise").textContent = drive.cruise ? "Cruise control: ON" : "Cruise control: OFF";
   $("driveCruise").setAttribute("aria-pressed", String(drive.cruise));
   $("driveCruise").textContent = drive.cruise ? "Cruise control: ON" : "Cruise control: OFF";
   if (drive3dEnabled) {
