@@ -59,7 +59,7 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
   assert.match(engine, /CanvasTexture\(asphaltCanvas\)/);
   assert.match(engine, /function adaptQuality\(/);
   assert.match(engine, /renderer\.setPixelRatio\(target\)/);
-  assert.match(engine, /mobileGPU \? 768 : 1536/);
+  assert.match(engine, /mobileGPU \? 512 : 1024/);
 });
 
 
