@@ -19,7 +19,7 @@ test("every statically referenced UI ID exists in index.html", () => {
 });
 
 test("the browser loads one deferred classic script and bundles local helpers", () => {
-  assert.ok(html.includes('<script defer src="./app.js?v=airhand-20261014-26"></script>'));
+  assert.match(html, /<script defer src="\.\/app\.js\?v=airhand-[^"]+"><\/script>/);
   assert.ok(app.includes("function detectGesture("));
   assert.ok(app.includes("function reportAirHandRuntimeError("));
   assert.ok(app.includes("window.__AIRHAND_READY__ = true"));
@@ -185,7 +185,8 @@ test("Air Drive has detailed perspective scenery, road texture, lane markings, a
 test("Air Drive steering visibly moves the car and Space applies braking", () => {
   assert.ok(app.includes("cameraFollow = drive.lane * width * 0.025 * t"));
   assert.ok(app.includes("playerX = playerRoad.center + drive.lane * playerRoad.half * 0.62"));
-  assert.ok(app.includes("if (drive.braking) drive.speed = Math.max(0, drive.speed - dt * 105)"));
+  assert.ok(app.includes("if (drive.braking) {"));
+  assert.ok(app.includes("drive.speed > 120 ? 158 : 112"));
   assert.ok(app.includes('if (currentMode === "drive" && event.code === "Space") drive.braking = false;'));
   assert.ok(app.includes("freeLanes.length ? freeLanes : lanes"));
 });
