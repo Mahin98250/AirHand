@@ -170,3 +170,20 @@ test("traffic collisions use oriented overlap and near-misses require an actual 
   assert.match(engine, /lateralGap >= 1\.72 && lateralGap < 2\.65/);
   assert.doesNotMatch(engine, /distance > 2\.6 && distance < 4\.2/);
 });
+
+
+test("traffic uses three safe lanes, reacts to closing player traffic, and changes lanes smoothly", () => {
+  assert.match(engine, /const side = \[-3\.8, 0, 3\.8\]\[i % 3\]/);
+  assert.match(engine, /homeLane: side, laneTarget: side, laneCooldown: 0/);
+  assert.match(engine, /const playerClosing = gapToPlayer > 4 && gapToPlayer < 34/);
+  assert.match(engine, /let blockedAhead = false/);
+  assert.match(engine, /item\.lane \+= clamp\(item\.laneTarget - item\.lane, -2\.2 \* dt, 2\.2 \* dt\)/);
+  assert.match(engine, /item\.t = \(item\.t \+ item\.cruiseSpeed \* difficulty \* dt \/ totalLength\) % 1/);
+});
+
+test("difficulty progresses gradually with score and laps, while steering and braking stay controlled", () => {
+  assert.match(engine, /function getDifficulty\(\)[\s\S]*?Math\.floor\(score \/ 1800\) \* 0\.05 \+ laps \* 0\.04, 1, 1\.4/);
+  assert.match(engine, /steeringResponse \+= \(controls\.steer - steeringResponse\) \* \(1 - Math\.exp\(-dt \* 7\.5\)\)/);
+  assert.match(engine, /const brakingForce = Math\.min\(9200, 5200 \+ Math\.abs\(longitudinalSpeed\) \* 85\)/);
+  assert.match(engine, /difficulty: Math\.round\(getDifficulty\(\) \* 100\) \/ 100/);
+});
