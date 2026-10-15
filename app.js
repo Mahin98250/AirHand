@@ -1452,6 +1452,7 @@ async function ensureDrive3D() {
     });
     drive3dInstance.setScene(drive.scene);
     drive3dInstance.setCarColour(drive.carColor);
+    drive3dInstance.setGraphicsMode($("driveGraphics")?.value || "auto");
     syncDrive3DControls();
     if (status) status.textContent = "3D physics ready · gestures and touch controls enabled";
     return true;
@@ -2105,6 +2106,14 @@ $("driveScene").addEventListener("change", event => {
   if (drive3dInstance) drive3dInstance.setScene(drive.scene);
   renderDrive();
   showToast("Scenery: " + DRIVE_SCENES[drive.scene].label);
+});
+$("driveGraphics").addEventListener("change", event => {
+  const mode = event.target.value === "ultra" ? "ultra" : "auto";
+  if (drive3dInstance) drive3dInstance.setGraphicsMode(mode);
+  if ($("drive3dStatus")) $("drive3dStatus").textContent = mode === "ultra"
+    ? "Ultra graphics selected · resolution adapts to keep gameplay responsive"
+    : "Auto graphics selected · balanced for this device";
+  showToast(mode === "ultra" ? "Ultra graphics enabled · the game will lower resolution if frames slow down." : "Auto graphics enabled · balanced visual quality and speed.");
 });
 document.querySelectorAll("[data-drive-car]").forEach(button => button.addEventListener("click", () => {
   drive.carColor = button.dataset.driveCar;
