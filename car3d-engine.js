@@ -406,8 +406,10 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     .setTranslation(trackCurve.getPointAt(0).x, 0.9, trackCurve.getPointAt(0).z).setLinearDamping(0.08).setAngularDamping(1.9)
     .setCcdEnabled(true).setCanSleep(false));
   carCollider = world.createCollider(RAPIER.ColliderDesc.cuboid(0.9, 0.32, 1.82)
-    // Half-extents are used above; this density keeps the chassis near a realistic car mass.
-    .setDensity(330).setFriction(0.85).setRestitution(0.01), carBody);
+    // The visual model's origin is at chassis height, but the physical contact box
+    // sits lower so the wheels can rest on the road without an upward spring impulse.
+    .setTranslation(0, -0.55, 0)
+    .setDensity(330).setFriction(1.15).setRestitution(0), carBody);
   const staticWheelLoad = carBody.mass() * 9.81 / 4;
 
   const ambientDust = new THREE.Group();
@@ -513,41 +515,33 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const boostPower = boostActive ? 3400 : 0;
     engineForce = power + boostPower;
     if (longitudinalSpeed < (boostActive ? 68 : maxSpeed) && !controls.brake) {
-      carBody.addForceAtPoint(scale(forward, engineForce * surfaceGrip), add(pos, rotateLocal({ x: 0, y: -0.18, z: 0.72 }, rot)), true);
+      carBody.addForceAtPoint(scale(forward, engineForce * surfaceGrip), add(pos, rotateLocal({ x: 0, y: -0.55, z: 0.72 }, rot)), true);
     }
     if (controls.brake) {
-      carBody.addForceAtPoint(scale(forward, -Math.sign(longitudinalSpeed || 1) * Math.min(10000, 3200 + Math.abs(longitudinalSpeed) * 190)), add(pos, rotateLocal({ x: 0, y: -0.2, z: 0.65 }, rot)), true);
+      carBody.addForceAtPoint(scale(forward, -Math.sign(longitudinalSpeed || 1) * Math.min(10000, 3200 + Math.abs(longitudinalSpeed) * 190)), add(pos, rotateLocal({ x: 0, y: -0.55, z: 0.65 }, rot)), true);
     }
-    // Four independent raycast suspension points apply spring/damper and tyre grip
-    // at the contact patch. This is a real rigid-body chassis, not screen-space motion.
+    // Raycast contact points provide tyre grip only. Vertical stability comes from
+    // the low-mounted chassis collider contacting the road, not spring forces that
+    // can accumulate into a launch on mobile frame-rate or geometry variations.
     const wheelOffsets = [
       { x: -0.76, y: -0.52, z: -1.18, front: true, left: true },
       { x: 0.76, y: -0.52, z: -1.18, front: true, left: false },
       { x: -0.76, y: -0.52, z: 1.18, front: false, left: true },
       { x: 0.76, y: -0.52, z: 1.18, front: false, left: false }
     ];
-    // Suspension length is the wheel-centre clearance above the sampled road.
-    // Preload each spring with one quarter of vehicle weight to prevent the old
-    // zero-load drop / hard spring compression / upward-launch cycle.
-    const restLength = 0.39, spring = 22000, damper = 3200;
     for (const wheel of wheelOffsets) {
       const arm = rotateLocal(wheel, rot);
       const wheelPos = add(pos, arm);
       const origin = { x: wheelPos.x, y: wheelPos.y + 0.9, z: wheelPos.z };
       const ray = new RAPIER.Ray(origin, { x: 0, y: -1, z: 0 });
       const hit = world.castRayAndGetNormal(ray, 1.5, true, undefined, undefined, undefined, carBody);
-      if (!hit) continue;
-      const distance = hit.timeOfImpact;
-      if (distance > 1.42) continue;
-      const suspensionLength = distance - 0.9;
+      if (!hit || hit.timeOfImpact > 1.42) continue;
+      const contactPoint = { x: origin.x, y: origin.y - hit.timeOfImpact, z: origin.z };
       const pointVelocity = {
         x: lin.x + ang.y * arm.z - ang.z * arm.y,
         y: lin.y + ang.z * arm.x - ang.x * arm.z,
         z: lin.z + ang.x * arm.y - ang.y * arm.x
       };
-      const springForce = clamp(staticWheelLoad + (restLength - suspensionLength) * spring - pointVelocity.y * damper, 0, 9000);
-      const contactPoint = { x: origin.x, y: origin.y - distance, z: origin.z };
-      carBody.addForceAtPoint({ x: 0, y: springForce, z: 0 }, contactPoint, true);
       let wheelForward = forward;
       if (wheel.front) {
         const steerYaw = -controls.steer * 0.48;
@@ -557,7 +551,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       const wheelRight = normalise({ x: wheelForward.z, y: 0, z: -wheelForward.x });
       const longitudinal = dot(pointVelocity, wheelForward);
       const lateral = dot(pointVelocity, wheelRight);
-      const tireLoad = springForce * 0.25;
+      const tireLoad = staticWheelLoad * 0.25;
       const lateralGrip = surfaceGrip * (controls.boost ? 0.8 : 1);
       carBody.addForceAtPoint(scale(wheelRight, -lateral * tireLoad * 0.075 * lateralGrip), contactPoint, true);
       if (controls.brake && Math.abs(longitudinal) > 0.2) {
@@ -611,7 +605,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         item.hit = true;
         damage += 1;
         hitCooldown = 1.25;
-        carBody.applyImpulse({ x: (p.x - t.x) * 320, y: 120, z: (p.z - t.z) * 320 }, true);
+        carBody.applyImpulse({ x: (p.x - t.x) * 320, y: 0, z: (p.z - t.z) * 320 }, true);
         if (callbacks.onCollision) callbacks.onCollision({ damage, remaining: Math.max(0, 3 - damage) });
         if (damage >= 3) {
           pause();
