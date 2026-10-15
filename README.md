@@ -12,6 +12,7 @@ AirHand is a mobile-friendly browser app that turns webcam hand movements into a
 - **Live framing guidance** tells you when your hand is near the frame edge or too close/small.
 - **Hand Runner arcade mode:** increasingly difficult obstacles, floating collectible stars, combo multipliers, bonus points, personal best, three pace settings and optional sound effects.
 - **Air Drive:** perspective road rendering with four selectable environments, custom car paint, two-hand steering, touch and keyboard controls, cruise/manual throttle, nitro boost, optional generated engine audio, near-miss rewards, three-hit vehicle damage, and a saved personal-best score.
+- **Air Drive 3D:** Three.js rendering with a Rapier rigid-body physics world, raycast wheel suspension, spring/damper forces, tyre grip, steering torque, road barriers, traffic collisions, camera follow, and gesture-controlled acceleration, braking and nitro.
 - **Mobile friendly inputs:** gesture control, tap/click and keyboard fallbacks, plus camera stop, mirror preview, landmarks and cursor response settings.
 - Camera frames and gesture inference stay in the browser; there is no video upload or app backend.
 
@@ -30,7 +31,16 @@ Source code: https://github.com/Mahin98250/AirHand
 - **Driving feedback:** pass close to traffic for near-miss bonuses and nitro recharge. Three impacts end the session; resetting starts a fresh run.
 - **Pause and sound:** use P or the pause control, and enable the optional synthesised engine sound from the cockpit controls.
 
-Air Drive uses a custom perspective-rendered Canvas scene rather than a full 3D engine. The lighting, road, weather, motion and traffic are rendered in the browser without external game assets.
+Air Drive includes two driving modes: a lightweight Canvas arcade mode and a 3D mode backed by Three.js and the Rapier physics engine. The 3D mode simulates a rigid-body chassis, raycast suspension, spring/damper forces, tyre grip, steering torque, road barriers and physical traffic collisions. It is a browser-based game prototype, not a licensed vehicle simulator.
+
+### 3D gesture controls
+
+- **Steering:** rotate both visible hands together as if turning a steering wheel. Calibrate your neutral hand position first.
+- **Accelerate:** make a fist with the hand on the right side of the camera.
+- **Brake:** open that hand into a flat palm.
+- **Nitro:** show a thumbs-up with that hand.
+- **Safety:** if the camera loses either hand, gesture pedals release. Touch and keyboard controls remain available as fallbacks.
+- **Dependencies:** the 3D engine loads Three.js and Rapier from jsDelivr on first use. The service worker caches same-origin game code and supported CDN responses after they have been fetched successfully, but a first-time 3D load requires internet access.
 
 ## Run it
 
