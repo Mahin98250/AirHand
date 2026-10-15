@@ -1074,24 +1074,43 @@ function drawDriveTree(ctx, x, y, size, side, depth) {
   ctx.beginPath(); ctx.ellipse(side * -2, -29, 3, 9, -.25, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
+const DRIVE_SCENES = Object.freeze({
+  sunset: { label: "Golden-hour hills", skyTop: "#10253e", skyMid: "#527f9d", skyLow: "#f0b887", skyEnd: "#e7d5b2", mountainFar: "#344f69", mountainNear: "#506d68", grassTop: "#426f53", grassBottom: "#193f35", asphaltTop: "#414b57", asphaltMid: "#303943", asphaltBottom: "#202832", sun: true, stars: false, wet: false, rain: false },
+  coast: { label: "Coastal highway", skyTop: "#0c4666", skyMid: "#63b7c8", skyLow: "#d6e9cf", skyEnd: "#c9dfb5", mountainFar: "#456d80", mountainNear: "#719d91", grassTop: "#5d9b6b", grassBottom: "#1f5b4f", asphaltTop: "#59636b", asphaltMid: "#3c4851", asphaltBottom: "#27333d", sun: true, stars: false, wet: false, rain: false },
+  night: { label: "Night drive", skyTop: "#030918", skyMid: "#0b1d38", skyLow: "#172844", skyEnd: "#1b2e41", mountainFar: "#18263a", mountainNear: "#1a3440", grassTop: "#183c39", grassBottom: "#081b25", asphaltTop: "#202a38", asphaltMid: "#141d29", asphaltBottom: "#0c131d", sun: false, stars: true, wet: false, rain: false },
+  rain: { label: "Rain-soaked road", skyTop: "#1b2938", skyMid: "#475a6b", skyLow: "#74828b", skyEnd: "#59656e", mountainFar: "#374954", mountainNear: "#344e4b", grassTop: "#34554b", grassBottom: "#112e2b", asphaltTop: "#394b5d", asphaltMid: "#202e3b", asphaltBottom: "#101b26", sun: false, stars: false, wet: true, rain: true }
+});
 function renderDrive() {
   if (!$("driveCanvas")) return;
   if (!driveContext || !driveCanvas.width) fitDriveCanvas();
   if (!driveContext) return;
   const width = driveCanvas.clientWidth || 800, height = Math.round((driveCanvas.clientWidth || 800) / 1.55);
   const ctx = driveContext;
+  const scene = DRIVE_SCENES[drive.scene] || DRIVE_SCENES.sunset;
   ctx.clearRect(0, 0, width, height);
+  ctx.save();
+  if (drive.shake > 0) ctx.translate((Math.random() - 0.5) * drive.shake * 9, (Math.random() - 0.5) * drive.shake * 6);
   const horizon = height * 0.29;
   // Evening sky, sun glow and soft cloud bands.
   const sky = ctx.createLinearGradient(0, 0, 0, height);
-  sky.addColorStop(0, "#10253e"); sky.addColorStop(0.42, "#527f9d"); sky.addColorStop(0.72, "#f0b887"); sky.addColorStop(1, "#e7d5b2");
+  sky.addColorStop(0, scene.skyTop); sky.addColorStop(0.42, scene.skyMid); sky.addColorStop(0.72, scene.skyLow); sky.addColorStop(1, scene.skyEnd);
   ctx.fillStyle = sky; ctx.fillRect(0, 0, width, height);
   const sunX = width * 0.76, sunY = height * 0.19;
-  const glow = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, height * 0.22);
-  glow.addColorStop(0, "#fff6d9c7"); glow.addColorStop(0.35, "#ffd8a44a"); glow.addColorStop(1, "#ffd8a400");
-  ctx.fillStyle = glow; ctx.fillRect(0, 0, width, height * 0.5);
-  ctx.fillStyle = "#fff0cc";
-  ctx.beginPath(); ctx.arc(sunX, sunY, Math.max(8, height * 0.025), 0, Math.PI * 2); ctx.fill();
+  if (scene.sun) {
+    const glow = ctx.createRadialGradient(sunX, sunY, 2, sunX, sunY, height * 0.22);
+    glow.addColorStop(0, "#fff6d9c7"); glow.addColorStop(0.35, "#ffd8a44a"); glow.addColorStop(1, "#ffd8a400");
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, width, height * 0.5);
+    ctx.fillStyle = "#fff0cc";
+    ctx.beginPath(); ctx.arc(sunX, sunY, Math.max(8, height * 0.025), 0, Math.PI * 2); ctx.fill();
+  }
+  if (scene.stars) {
+    for (let i = 0; i < 46; i++) {
+      const sx = (i * 73.17 + (i % 4) * 11) % width;
+      const sy = (i * 29.13) % Math.max(1, height * 0.27);
+      ctx.fillStyle = i % 5 === 0 ? "#dff5ffbb" : "#dff5ff66";
+      ctx.fillRect(sx, sy, i % 5 === 0 ? 1.8 : 1, i % 5 === 0 ? 1.8 : 1);
+    }
+  }
   for (let i = 0; i < 5; i++) {
     const cx = (((i * 0.237 + drive.roadOffset * 0.00012) % 1.25) - 0.1) * width;
     const cy = height * (0.09 + (i % 3) * 0.055);
@@ -1099,15 +1118,15 @@ function renderDrive() {
     ctx.beginPath(); ctx.ellipse(cx, cy, width * (0.045 + (i % 2) * 0.018), height * 0.014, 0, 0, Math.PI * 2); ctx.fill();
   }
   // Layered mountain silhouettes give the horizon scale.
-  ctx.fillStyle = "#344f69"; ctx.beginPath(); ctx.moveTo(0, height * .39);
+  ctx.fillStyle = scene.mountainFar; ctx.beginPath(); ctx.moveTo(0, height * .39);
   for (let x = 0; x <= width + 36; x += 36) ctx.lineTo(x, height * (.25 + ((Math.sin(x * .025) + 1) * .065)));
   ctx.lineTo(width, height * .49); ctx.lineTo(0, height * .49); ctx.fill();
-  ctx.fillStyle = "#506d68"; ctx.beginPath(); ctx.moveTo(0, height * .43);
+  ctx.fillStyle = scene.mountainNear; ctx.beginPath(); ctx.moveTo(0, height * .43);
   for (let x = 0; x <= width + 48; x += 48) ctx.lineTo(x, height * (.34 + ((Math.sin(x * .018 + 2) + 1) * .045)));
   ctx.lineTo(width, height * .55); ctx.lineTo(0, height * .55); ctx.fill();
   // Grass verge with gently moving perspective bands.
   const ground = ctx.createLinearGradient(0, horizon, 0, height);
-  ground.addColorStop(0, "#426f53"); ground.addColorStop(1, "#193f35");
+  ground.addColorStop(0, scene.grassTop); ground.addColorStop(1, scene.grassBottom);
   ctx.fillStyle = ground; ctx.fillRect(0, horizon, width, height - horizon);
   for (let i = 0; i < 13; i++) {
     const phase = ((i / 13 + drive.roadOffset * 0.0018) % 1 + 1) % 1;
@@ -1159,7 +1178,7 @@ function renderDrive() {
   }
   ctx.beginPath(); roadPoints.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
   const asphalt = ctx.createLinearGradient(0, horizon, 0, height);
-  asphalt.addColorStop(0, "#414b57"); asphalt.addColorStop(0.55, "#303943"); asphalt.addColorStop(1, "#202832");
+  asphalt.addColorStop(0, scene.asphaltTop); asphalt.addColorStop(0.55, scene.asphaltMid); asphalt.addColorStop(1, scene.asphaltBottom);
   ctx.fillStyle = asphalt; ctx.fill();
   // Perspective grain gives the asphalt subtle directional texture.
   for (let i = 0; i < 24; i++) {
@@ -1179,6 +1198,18 @@ function renderDrive() {
     const x = road.center + (seed * 2 - 1) * road.half * .94;
     ctx.fillStyle = i % 2 ? "#d9e0e20a" : "#07121a18";
     ctx.fillRect(x, y, 1 + depth * 1.4, 1 + depth * 1.4);
+  }
+  if (scene.wet) {
+    // Water sheen and broken reflections stretch toward the viewer on wet tarmac.
+    for (let i = 0; i < 18; i++) {
+      const depth = ((i / 18 + drive.roadOffset * 0.0011) % 1 + 1) % 1;
+      const y = horizon + (height - horizon) * depth * depth;
+      const road = driveRoadGeometry(width, height, y);
+      const offset = Math.sin(i * 8.7) * road.half * 0.48;
+      ctx.strokeStyle = i % 3 === 0 ? "#d8f3ff2d" : "#9ac7e116";
+      ctx.lineWidth = 0.5 + depth * 2.2;
+      ctx.beginPath(); ctx.moveTo(road.center + offset, y); ctx.lineTo(road.center + offset + Math.sin(i) * depth * 16, y + 2 + depth * 14); ctx.stroke();
+    }
   }
   // Red-white rumble strips and solid road-edge lines.
   for (let i = 0; i < samples; i++) {
@@ -1224,11 +1255,24 @@ function renderDrive() {
   const playerY = height * 0.875;
   const playerRoad = driveRoadGeometry(width, height, playerY);
   const playerX = playerRoad.center + drive.lane * playerRoad.half * 0.62;
+  // Nitro trails flare behind the car and soften as the charge runs out.
+  if (drive.boosting && drive.nitro > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    for (let i = 0; i < 7; i++) {
+      const spread = (i - 3) * 5;
+      const flame = ctx.createLinearGradient(playerX + spread, playerY + 4, playerX + spread, playerY + 48 + Math.random() * 14);
+      flame.addColorStop(0, "#75f4ffdd"); flame.addColorStop(0.35, "#3db5ff99"); flame.addColorStop(1, "#3d8aff00");
+      ctx.fillStyle = flame;
+      ctx.beginPath(); ctx.moveTo(playerX + spread, playerY + 3); ctx.lineTo(playerX + spread - 2.5, playerY + 34); ctx.lineTo(playerX + spread + 2.5, playerY + 34); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
   // A soft cyan reflection beneath the player's car.
   const carGlow = ctx.createRadialGradient(playerX, playerY + 9, 2, playerX, playerY + 9, 48);
   carGlow.addColorStop(0, "#4ee9ff30"); carGlow.addColorStop(1, "#4ee9ff00");
   ctx.fillStyle = carGlow; ctx.fillRect(playerX - 55, playerY - 28, 110, 70);
-  drawDriveCar(ctx, playerX, playerY, 1.16, "#28bfea", drive.steer, true);
+  drawDriveCar(ctx, playerX, playerY, 1.16, drive.carColor, drive.steer, true);
   // High-speed peripheral streaks add a little sense of acceleration without hiding the track.
   if (drive.speed > 150) {
     ctx.strokeStyle = "#e2f6ff22"; ctx.lineWidth = 1;
@@ -1242,17 +1286,36 @@ function renderDrive() {
     }
     ctx.globalAlpha = 1;
   }
+  if (scene.rain) {
+    // Fine rain streaks add motion without obscuring the road or controls.
+    ctx.save();
+    ctx.strokeStyle = "#d4e9ff6d";
+    ctx.lineCap = "round";
+    for (let i = 0; i < 105; i++) {
+      const x = (i * 71.3 + drive.roadOffset * 1.4) % (width + 24) - 12;
+      const y = (i * 43.9 + drive.roadOffset * 2.2) % (height + 16) - 8;
+      const length = 3 + (i % 5) * 1.4;
+      ctx.lineWidth = i % 4 === 0 ? 1.1 : 0.6;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2.5, y + length); ctx.stroke();
+    }
+    ctx.restore();
+  }
   // Gentle edge vignette frames the action and HUD.
   const vignette = ctx.createLinearGradient(0, 0, width, 0);
   vignette.addColorStop(0, "#06101d55"); vignette.addColorStop(0.15, "#06101d00"); vignette.addColorStop(0.85, "#06101d00"); vignette.addColorStop(1, "#06101d55");
   ctx.fillStyle = vignette; ctx.fillRect(0, 0, width, height);
-  // Steering wheel indicator.
+  // Steering wheel indicator with a responsive needle.
   const wheelX = width * 0.5, wheelY = height * 0.88;
   ctx.strokeStyle = "#e8f5ff85"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(wheelX, wheelY, 25, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke();
-  ctx.strokeStyle = "#69e6ff"; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(wheelX, wheelY); ctx.lineTo(wheelX + drive.steer * 22, wheelY - 24); ctx.stroke();
+  ctx.strokeStyle = drive.boosting ? "#a4f8ff" : "#69e6ff"; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(wheelX, wheelY); ctx.lineTo(wheelX + drive.steer * 22, wheelY - 24); ctx.stroke();
+  ctx.restore();
   $("driveSpeed").textContent = String(Math.round(drive.speed));
   $("driveScore").textContent = String(Math.floor(drive.score)).padStart(4, "0");
-  $("driveSteer").textContent = drive.steer < -.15 ? "LEFT" : drive.steer > .15 ? "RIGHT" : drive.braking ? "BRAKE" : "CENTER";
+  $("driveSteer").textContent = drive.braking ? "BRAKE" : drive.boosting ? "BOOST" : drive.steer < -.15 ? "LEFT" : drive.steer > .15 ? "RIGHT" : Math.abs(drive.lane) > .74 ? "OFF ROAD" : "CENTER";
+  const damage = $("driveDamage"); if (damage) damage.textContent = drive.damage + "/3";
+  const misses = $("driveNearMisses"); if (misses) misses.textContent = String(drive.nearMisses);
+  const nitroFill = $("driveNitroFill"); if (nitroFill) nitroFill.style.width = drive.nitro + "%";
+  const nitroValue = $("driveNitroValue"); if (nitroValue) nitroValue.textContent = Math.round(drive.nitro) + "%";
 }
 function setDriveSound(enabled) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
