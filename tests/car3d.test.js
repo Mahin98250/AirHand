@@ -46,7 +46,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v15/);
+  assert.match(worker, /airhand-shell-v16/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -87,7 +87,7 @@ test("3D start snaps the follow camera and reuses physics descriptors", () => {
 });
 
 test("arcade physics locks vertical position and pitch/roll after each physics step", () => {
-  assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*updateTrafficAndCollisions\(\)/);
+  assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*updateTrackProgress\(\);\s*updateTrafficAndCollisions\(\)/);
   assert.match(engine, /function keepCarGrounded\(\)[\s\S]*?setTranslation\(\{ x: position\.x, y: 0\.9, z: position\.z \}, true\)/);
   assert.match(engine, /setLinvel\(\{ x: velocity\.x, y: 0, z: velocity\.z \}, true\)/);
   assert.match(engine, /setRotation\(\{ x: 0, y: Math\.sin\(yaw \/ 2\), z: 0, w: Math\.cos\(yaw \/ 2\) \}, true\)/);
