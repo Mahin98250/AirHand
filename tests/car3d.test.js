@@ -46,7 +46,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v15/);
+  assert.match(worker, /airhand-shell-v16/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -87,7 +87,7 @@ test("3D start snaps the follow camera and reuses physics descriptors", () => {
 });
 
 test("arcade physics locks vertical position and pitch/roll after each physics step", () => {
-  assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*updateTrafficAndCollisions\(\)/);
+  assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*updateTrackProgress\(\);\s*updateTrafficAndCollisions\(\)/);
   assert.match(engine, /function keepCarGrounded\(\)[\s\S]*?setTranslation\(\{ x: position\.x, y: 0\.9, z: position\.z \}, true\)/);
   assert.match(engine, /setLinvel\(\{ x: velocity\.x, y: 0, z: velocity\.z \}, true\)/);
   assert.match(engine, /setRotation\(\{ x: 0, y: Math\.sin\(yaw \/ 2\), z: 0, w: Math\.cos\(yaw \/ 2\) \}, true\)/);
@@ -101,7 +101,8 @@ test("3D car spawn uses a low-contact collider and cannot spring-launch at start
   assert.match(engine, /const tireLoad = staticWheelLoad \* 0\.25/);
   assert.doesNotMatch(engine, /const restLength = 0\.39, spring = 22000, damper = 3200/);
   assert.doesNotMatch(engine, /addForceAtPoint\(\{ x: 0, y: springForce, z: 0 \}/);
-  assert.match(engine, /carBody\.applyImpulse\(\{ x: \(p\.x - t\.x\) \* 320, y: 0, z: \(p\.z - t\.z\) \* 320 \}/);
+  assert.match(engine, /const impactImpulse = clamp\(closingSpeed \* carBody\.mass\(\) \* 0\.1, 120, 1600\)/);
+  assert.match(engine, /const overlapping = Math\.abs\(relativePosition\.x\) < 1\.72 && Math\.abs\(relativePosition\.z\) < 3\.45/);
 });
 
 test("Ultra rendering mode remains adaptive and repeated scenery uses instancing", () => {
@@ -149,4 +150,23 @@ test("mobile cockpit provides readable graphics status and thumb-friendly touch 
   assert.match(html, /min-height:48px/);
   assert.match(html, /drive-controls \.drive-pad #driveBrake\{grid-column:2\/4\}/);
   assert.match(app, /onGraphicsMode\(mode, pixelRatio, shadowsActive\)/);
+});
+
+
+test("3D driving uses speed-limited acceleration, bicycle-model steering, and distance-based progression", () => {
+  assert.match(engine, /const speedHeadroom = clamp\(\(speedLimit - longitudinalSpeed\) \/ 7, 0, 1\)/);
+  assert.match(engine, /Bicycle-model steering/);
+  assert.match(engine, /const aerodynamicDrag = longitudinalSpeed \* Math\.abs\(longitudinalSpeed\) \* 0\.28/);
+  assert.match(engine, /function updateTrackProgress\(\)/);
+  assert.match(engine, /score \+= travelled \* 0\.8/);
+  assert.match(engine, /wrappedForwardCrossing/);
+  assert.match(engine, /laps, nitro: Math\.round\(nitro\)/);
+});
+
+test("traffic collisions use oriented overlap and near-misses require an actual pass", () => {
+  assert.match(engine, /const relativePosition = rotateLocal/);
+  assert.match(engine, /const overlapping = Math\.abs\(relativePosition\.x\) < 1\.72 && Math\.abs\(relativePosition\.z\) < 3\.45/);
+  assert.match(engine, /const passedFrontToBack = item\.previousRelativeZ !== null/);
+  assert.match(engine, /lateralGap >= 1\.72 && lateralGap < 2\.65/);
+  assert.doesNotMatch(engine, /distance > 2\.6 && distance < 4\.2/);
 });
