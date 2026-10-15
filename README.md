@@ -164,3 +164,7 @@ Run `npm run check` and `npm test`. GitHub Actions runs the checks for each push
 
 ### Air Drive gameplay logic
 The 3D drive uses speed-limited throttle and nitro, speed-sensitive bicycle-model steering, rolling/aerodynamic drag, and stronger off-road resistance. Score follows actual distance moved; laps are counted only when the car crosses the start/finish portion of the circuit in the forward direction. Traffic impacts use player-relative oriented overlap and closing speed, while near-miss rewards require passing a vehicle with a narrow lateral gap instead of merely being nearby.
+
+
+### Air Drive traffic intelligence and balancing
+Traffic now occupies three stable lane offsets, smoothly changes lanes when the player is closing quickly or a slower vehicle blocks its path, and avoids selecting lanes already occupied nearby. Traffic pace increases gradually with distance score and completed laps, with a hard cap on the difficulty multiplier. Player steering is smoothed at the physics tick, and braking uses a capped speed-dependent force to make deceleration more consistent. These rules are covered by automated regression checks; real-device handling still needs physical play testing.
