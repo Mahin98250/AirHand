@@ -11,7 +11,7 @@ AirHand is a mobile-friendly browser app that turns webcam hand movements into a
 - **Full-frame camera preview** adjusts to the camera's actual aspect ratio and uses `object-fit: contain` to avoid clipping fingertips.
 - **Live framing guidance** tells you when your hand is near the frame edge or too close/small.
 - **Hand Runner arcade mode:** increasingly difficult obstacles, floating collectible stars, combo multipliers, bonus points, personal best, three pace settings and optional sound effects.
-- **Air Drive:** perspective road rendering with four selectable environments, custom car paint, two-hand steering, touch and keyboard controls, cruise/manual throttle, nitro boost, optional generated engine audio, near-miss rewards, and three-hit vehicle damage.
+- **Air Drive:** perspective road rendering with four selectable environments, custom car paint, two-hand steering, touch and keyboard controls, cruise/manual throttle, nitro boost, optional generated engine audio, near-miss rewards, three-hit vehicle damage, and a saved personal-best score.
 - **Mobile friendly inputs:** gesture control, tap/click and keyboard fallbacks, plus camera stop, mirror preview, landmarks and cursor response settings.
 - Camera frames and gesture inference stay in the browser; there is no video upload or app backend.
 
