@@ -173,7 +173,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     roadUvs.push(0, t * 36, 1, t * 36);
     if (i < roadSegments) {
       const a = i * 2;
-      roadIndices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      // Winding is upward-facing so the asphalt renders and collides from above.
+      roadIndices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
     }
   }
   const roadGeo = geometry(new THREE.BufferGeometry());
