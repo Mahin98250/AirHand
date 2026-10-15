@@ -241,7 +241,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     for (const x of [-0.94, 0.94]) for (const z of [-1.23, 1.23]) {
       const wheel = mesh(wheelGeo, tyreMat, group);
       wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(x, 0.32, z);
+      wheel.position.set(x, 0.03, z);
       const rim = mesh(geometry(new THREE.CylinderGeometry(0.21, 0.21, 0.285, 12)), rimMat, group);
       rim.rotation.z = Math.PI / 2;
       rim.position.copy(wheel.position);
@@ -290,13 +290,13 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         .setLinearDamping(1.4).setAngularDamping(2.5));
       const collider = RAPIER.ColliderDesc.cuboid(0.94, 0.35, 1.8).setDensity(450).setFriction(0.8).setRestitution(0.05);
       world.createCollider(collider, body);
-      traffic.push({ model, body, collider: body.collider(0), hit: false, passed: false, nearChecked: false });
+      traffic.push({ model, body, hit: false, passed: false, nearChecked: false });
     }
   }
   buildTraffic();
 
   carBody = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(-45, 0.9, -18).setLinearDamping(0.08).setAngularDamping(1.9)
+    .setTranslation(trackCurve.getPointAt(0).x, 0.9, trackCurve.getPointAt(0).z).setLinearDamping(0.08).setAngularDamping(1.9)
     .setCcdEnabled(true).setCanSleep(false));
   carCollider = world.createCollider(RAPIER.ColliderDesc.cuboid(0.9, 0.32, 1.82)
     .setDensity(620).setFriction(0.7).setRestitution(0.02), carBody);
@@ -342,10 +342,13 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   function reset() {
     speed = 0; score = 0; damage = 0; nearMisses = 0; nitro = 100;
     hitCooldown = 0; offRoad = false; accumulator = 0; controls = { steer: 0, throttle: false, brake: false, boost: false };
-    carBody.setTranslation({ x: -45, y: 0.9, z: -18 }, true);
+    const startPoint = trackCurve.getPointAt(0);
+    carBody.setTranslation({ x: startPoint.x, y: 0.9, z: startPoint.z }, true);
     carBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
     carBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    carBody.setRotation({ x: 0, y: Math.sin(0.6 / 2), z: 0, w: Math.cos(0.6 / 2) }, true);
+    const startTangent = trackCurve.getTangentAt(0).normalize();
+    const startYaw = Math.atan2(-startTangent.x, -startTangent.z);
+    carBody.setRotation({ x: 0, y: Math.sin(startYaw / 2), z: 0, w: Math.cos(startYaw / 2) }, true);
     traffic.forEach((item, i) => {
       item.hit = false; item.passed = false; item.nearChecked = false;
       const t = (0.07 + i * 0.071) % 1;
@@ -395,30 +398,30 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const boostPower = boostActive ? 3400 : 0;
     engineForce = power + boostPower;
     if (longitudinalSpeed < maxSpeed && !controls.brake) {
-      carBody.applyForceAtPoint(scale(forward, engineForce * surfaceGrip), add(pos, rotateLocal({ x: 0, y: -0.18, z: 0.72 }, rot)), true);
+      carBody.addForceAtPoint(scale(forward, engineForce * surfaceGrip), add(pos, rotateLocal({ x: 0, y: -0.18, z: 0.72 }, rot)), true);
     }
     if (controls.brake) {
-      carBody.applyForceAtPoint(scale(forward, -Math.sign(longitudinalSpeed || 1) * Math.min(10000, 3200 + Math.abs(longitudinalSpeed) * 190)), add(pos, rotateLocal({ x: 0, y: -0.2, z: 0.65 }, rot)), true);
+      carBody.addForceAtPoint(scale(forward, -Math.sign(longitudinalSpeed || 1) * Math.min(10000, 3200 + Math.abs(longitudinalSpeed) * 190)), add(pos, rotateLocal({ x: 0, y: -0.2, z: 0.65 }, rot)), true);
     }
     // Four independent raycast suspension points apply spring/damper and tyre grip
     // at the contact patch. This is a real rigid-body chassis, not screen-space motion.
     const wheelOffsets = [
-      { x: -0.76, y: -0.14, z: -1.18, front: true, left: true },
-      { x: 0.76, y: -0.14, z: -1.18, front: true, left: false },
-      { x: -0.76, y: -0.14, z: 1.18, front: false, left: true },
-      { x: 0.76, y: -0.14, z: 1.18, front: false, left: false }
+      { x: -0.76, y: -0.52, z: -1.18, front: true, left: true },
+      { x: 0.76, y: -0.52, z: -1.18, front: true, left: false },
+      { x: -0.76, y: -0.52, z: 1.18, front: false, left: true },
+      { x: 0.76, y: -0.52, z: 1.18, front: false, left: false }
     ];
-    const restLength = 0.42, spring = 14500, damper = 1800;
+    const restLength = 0.4, spring = 14500, damper = 1800;
     for (const wheel of wheelOffsets) {
       const arm = rotateLocal(wheel, rot);
       const wheelPos = add(pos, arm);
-      const origin = { x: wheelPos.x, y: wheelPos.y + 0.36, z: wheelPos.z };
+      const origin = { x: wheelPos.x, y: wheelPos.y + 0.9, z: wheelPos.z };
       const ray = new RAPIER.Ray(origin, { x: 0, y: -1, z: 0 });
-      const hit = world.castRayAndGetNormal(ray, 1.15, true, undefined, undefined, undefined, carBody);
+      const hit = world.castRayAndGetNormal(ray, 1.5, true, undefined, undefined, undefined, carBody);
       if (!hit) continue;
       const distance = hit.timeOfImpact;
-      if (distance > 0.9) continue;
-      const suspensionLength = distance - 0.36;
+      if (distance > 1.42) continue;
+      const suspensionLength = distance - 0.9;
       const pointVelocity = {
         x: lin.x + ang.y * arm.z - ang.z * arm.y,
         y: lin.y + ang.z * arm.x - ang.x * arm.z,
@@ -426,7 +429,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       };
       const springForce = clamp((restLength - suspensionLength) * spring - pointVelocity.y * damper, 0, 19000);
       const contactPoint = { x: origin.x, y: origin.y - distance, z: origin.z };
-      carBody.applyForceAtPoint({ x: 0, y: springForce, z: 0 }, contactPoint, true);
+      carBody.addForceAtPoint({ x: 0, y: springForce, z: 0 }, contactPoint, true);
       let wheelForward = forward;
       if (wheel.front) {
         const steerYaw = -controls.steer * 0.48;
@@ -438,18 +441,18 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       const lateral = dot(pointVelocity, wheelRight);
       const tireLoad = springForce * 0.25;
       const lateralGrip = surfaceGrip * (controls.boost ? 0.8 : 1);
-      carBody.applyForceAtPoint(scale(wheelRight, -lateral * tireLoad * 0.075 * lateralGrip), contactPoint, true);
+      carBody.addForceAtPoint(scale(wheelRight, -lateral * tireLoad * 0.075 * lateralGrip), contactPoint, true);
       if (controls.brake && Math.abs(longitudinal) > 0.2) {
-        carBody.applyForceAtPoint(scale(wheelForward, -Math.sign(longitudinal) * tireLoad * 0.22), contactPoint, true);
+        carBody.addForceAtPoint(scale(wheelForward, -Math.sign(longitudinal) * tireLoad * 0.22), contactPoint, true);
       }
     }
     // Steering torque follows speed: responsive at low speed, calmer at high speed.
     const steerAuthority = clamp(1.0 - speed / 190, 0.24, 1);
     const targetYawRate = controls.steer * Math.min(1.65, Math.abs(longitudinalSpeed) * 0.095) * steerAuthority * Math.sign(longitudinalSpeed || 1);
     carBody.applyTorqueImpulse({ x: 0, y: (targetYawRate - ang.y) * 1.8 * dt * 620, z: 0 }, true);
-    carBody.applyForce({ x: -lin.x * 10, y: 0, z: -lin.z * 10 }, true);
-    carBody.applyForce({ x: 0, y: -Math.abs(longitudinalSpeed) * Math.abs(longitudinalSpeed) * 0.65, z: 0 }, true);
-    if (offRoad) carBody.applyForce(scale(forward, -longitudinalSpeed * 280), true);
+    carBody.addForce({ x: -lin.x * 10, y: 0, z: -lin.z * 10 }, true);
+    carBody.addForce({ x: 0, y: -Math.abs(longitudinalSpeed) * Math.abs(longitudinalSpeed) * 0.65, z: 0 }, true);
+    if (offRoad) carBody.addForce(scale(forward, -longitudinalSpeed * 280), true);
     score += Math.abs(longitudinalSpeed) * dt * 0.8;
     if (hitCooldown > 0) hitCooldown -= dt;
     if (pos.y < -3 || Math.abs(pos.x) > 180 || Math.abs(pos.z) > 180) reset();
@@ -491,7 +494,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         item.passed = false;
       }
       const tr = item.body.translation(), qr = item.body.rotation();
-      item.model.group.position.set(tr.x, tr.y - 0.1, tr.z);
+      item.model.group.position.set(tr.x, tr.y - 0.55, tr.z);
       item.model.group.quaternion.set(qr.x, qr.y, qr.z, qr.w);
       item.model.wheels.forEach(w => { w.wheel.rotation.x += speed * 0.002; w.rim.rotation.x += speed * 0.002; });
     }
@@ -499,7 +502,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
 
   function syncVisuals() {
     const p = carBody.translation(), q = carBody.rotation();
-    carRoot.position.set(p.x, p.y - 0.13, p.z);
+    carRoot.position.set(p.x, p.y - 0.55, p.z);
     carRoot.quaternion.set(q.x, q.y, q.z, q.w);
     const steeringAngle = -controls.steer * 0.48;
     allWheels.forEach(w => {
