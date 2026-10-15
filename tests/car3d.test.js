@@ -52,3 +52,12 @@ test("PWA caches the same-origin 3D module and can cache jsDelivr game dependenc
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
   assert.match(readme, /### 3D gesture controls/);
 });
+
+
+test("3D renderer includes real road collision and adaptive visual quality", () => {
+  assert.match(engine, /ColliderDesc\.trimesh\(new Float32Array\(roadPositions\), new Uint32Array\(roadIndices\)\)/);
+  assert.match(engine, /CanvasTexture\(asphaltCanvas\)/);
+  assert.match(engine, /function adaptQuality\(/);
+  assert.match(engine, /renderer\.setPixelRatio\(target\)/);
+  assert.match(engine, /mobileGPU \? 768 : 1536/);
+});
