@@ -35,7 +35,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     canvas, antialias: true, alpha: false, powerPreference: "high-performance"
   });
   const mobileGPU = matchMedia("(max-width: 760px)").matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
-  const maxPixelRatio = mobileGPU ? 1.25 : 1.75;
+  // Desktop can render at high-DPI / 4K-ready resolution; mobile stays conservative.
+  const maxPixelRatio = mobileGPU ? 1.35 : 2.5;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxPixelRatio));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -192,36 +193,63 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   world.createCollider(roadCollider, roadBody);
   fixedBodies.push(roadBody);
 
-  // Outer/inner edge strips, reflectors and physics guardrails.
-  const railGeo = geometry(new THREE.BoxGeometry(1, 0.42, 1));
+  // Render hundreds of guardrail segments with instancing to keep draw calls low.
+  // Collision rail bodies remain separate so impacts still use the physics engine.
+  const railSegmentLength = trackCurve.getLength() / roadSegments * 3.15;
+  const railGeo = geometry(new THREE.BoxGeometry(0.28, 0.42, railSegmentLength));
+  const railInstanceCapacity = Math.ceil(roadSegments / 3) * 2;
+  const railInstances = [
+    new THREE.InstancedMesh(railGeo, railMat, railInstanceCapacity),
+    new THREE.InstancedMesh(railGeo, darkRailMat, railInstanceCapacity)
+  ];
+  const railInstanceCounts = [0, 0];
+  railInstances.forEach(instance => { instance.castShadow = true; instance.receiveShadow = true; scene.add(instance); });
+  const railDummy = new THREE.Object3D();
   for (let i = 0; i < roadSegments; i += 3) {
     const p = trackCurve.getPointAt((i + 1.5) / roadSegments);
     const tangent = trackCurve.getTangentAt((i + 1.5) / roadSegments).normalize();
     const yaw = Math.atan2(-tangent.x, -tangent.z);
-    const segmentLength = trackCurve.getLength() / roadSegments * 3.15;
     for (const side of [-1, 1]) {
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
       const railPos = p.clone().addScaledVector(normal, side * (roadWidth / 2 + 0.38));
       railPos.y = 0.48;
-      const rail = mesh(geometry(new THREE.BoxGeometry(0.28, 0.42, segmentLength)), i % 2 ? railMat : darkRailMat);
-      rail.position.copy(railPos);
-      rail.rotation.y = yaw;
+      const materialIndex = i % 2 ? 0 : 1;
+      railDummy.position.copy(railPos);
+      railDummy.rotation.set(0, yaw, 0);
+      railDummy.scale.set(1, 1, 1);
+      railDummy.updateMatrix();
+      const instanceIndex = railInstanceCounts[materialIndex]++;
+      railInstances[materialIndex].setMatrixAt(instanceIndex, railDummy.matrix);
       const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(railPos.x, railPos.y, railPos.z).setRotation({ x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) }));
-      world.createCollider(RAPIER.ColliderDesc.cuboid(0.14, 0.21, segmentLength / 2).setFriction(0.9).setRestitution(0.08), body);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.14, 0.21, railSegmentLength / 2).setFriction(0.9).setRestitution(0.08), body);
       fixedBodies.push(body);
     }
   }
+  railInstances.forEach((instance, i) => {
+    instance.count = railInstanceCounts[i];
+    instance.instanceMatrix.needsUpdate = true;
+    instance.computeBoundingSphere();
+  });
 
-  // Painted center dashes are thin meshes just above the road surface.
-  for (let i = 0; i < 130; i++) {
-    if (i % 2) continue;
+  // Lane dashes share one geometry and one draw call instead of dozens of meshes.
+  const dashGeo = geometry(new THREE.BoxGeometry(0.16, 0.025, 1.25));
+  const dashCount = 65;
+  const dashInstances = new THREE.InstancedMesh(dashGeo, laneMat, dashCount);
+  dashInstances.castShadow = false; dashInstances.receiveShadow = true;
+  const dashDummy = new THREE.Object3D();
+  let dashIndex = 0;
+  for (let i = 0; i < 130; i += 2) {
     const t = i / 130;
     const p = trackCurve.getPointAt(t);
     const tangent = trackCurve.getTangentAt(t).normalize();
-    const dash = mesh(geometry(new THREE.BoxGeometry(0.16, 0.025, 1.25)), laneMat);
-    dash.position.set(p.x, 0.045, p.z);
-    dash.rotation.y = Math.atan2(-tangent.x, -tangent.z);
+    dashDummy.position.set(p.x, 0.045, p.z);
+    dashDummy.rotation.set(0, Math.atan2(-tangent.x, -tangent.z), 0);
+    dashDummy.updateMatrix();
+    dashInstances.setMatrixAt(dashIndex++, dashDummy.matrix);
   }
+  dashInstances.instanceMatrix.needsUpdate = true;
+  dashInstances.computeBoundingSphere();
+  scene.add(dashInstances);
 
   // Roadside scenery: varied tree silhouettes and distant low-poly hills.
   const hillMat = material(0x607d67);
@@ -236,24 +264,43 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     hill.position.set(x, h / 2 - 0.1, z);
     hill.rotation.y = angle;
   }
-  for (let i = 0; i < 100; i++) {
+  // Instanced tree geometry preserves varied shapes while keeping mobile draw calls low.
+  const treeCount = 100;
+  const trunkGeo = geometry(new THREE.CylinderGeometry(0.13, 0.22, 1.8, 6));
+  const leavesGeo = geometry(new THREE.ConeGeometry(0.95, 2.7, 7));
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
+  const leafInstances = treeMats.map(mat => new THREE.InstancedMesh(leavesGeo, mat, Math.ceil(treeCount / 3)));
+  trunks.castShadow = true; trunks.receiveShadow = true;
+  trunks.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+  leafInstances.forEach(instance => { instance.castShadow = true; instance.receiveShadow = true; instance.instanceMatrix.setUsage(THREE.StaticDrawUsage); scene.add(instance); });
+  scene.add(trunks);
+  const treeDummy = new THREE.Object3D();
+  const leafCounts = [0, 0, 0];
+  for (let i = 0; i < treeCount; i++) {
     const t = (i * 0.61803398875) % 1;
     const p = trackCurve.getPointAt(t);
     const tangent = trackCurve.getTangentAt(t);
     const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
     const side = i % 2 ? 1 : -1;
     p.addScaledVector(normal, side * (10 + (i % 6) * 2.1));
-    p.y = 0;
     const scaleFactor = 0.75 + (i % 5) * 0.12;
-    const group = new THREE.Group();
-    group.position.copy(p);
-    const trunk = mesh(geometry(new THREE.CylinderGeometry(0.13, 0.22, 1.8 * scaleFactor, 6)), trunkMat, group);
-    trunk.position.y = 0.9 * scaleFactor;
-    const leaves = mesh(geometry(new THREE.ConeGeometry(0.95 * scaleFactor, 2.7 * scaleFactor, 7)), treeMats[i % treeMats.length], group);
-    leaves.position.y = 2.45 * scaleFactor;
-    scene.add(group);
-    trees.push(group);
+    treeDummy.position.set(p.x, 0.9 * scaleFactor, p.z);
+    treeDummy.rotation.set(0, 0, 0);
+    treeDummy.scale.setScalar(scaleFactor);
+    treeDummy.updateMatrix();
+    trunks.setMatrixAt(i, treeDummy.matrix);
+    const materialIndex = i % treeMats.length;
+    treeDummy.position.y = 2.45 * scaleFactor;
+    treeDummy.updateMatrix();
+    leafInstances[materialIndex].setMatrixAt(leafCounts[materialIndex]++, treeDummy.matrix);
   }
+  trunks.instanceMatrix.needsUpdate = true;
+  trunks.computeBoundingSphere();
+  leafInstances.forEach((instance, i) => {
+    instance.count = leafCounts[i];
+    instance.instanceMatrix.needsUpdate = true;
+    instance.computeBoundingSphere();
+  });
 
   function makeCarModel(colour, isPlayer = false) {
     const group = new THREE.Group();
@@ -331,7 +378,9 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     .setTranslation(trackCurve.getPointAt(0).x, 0.9, trackCurve.getPointAt(0).z).setLinearDamping(0.08).setAngularDamping(1.9)
     .setCcdEnabled(true).setCanSleep(false));
   carCollider = world.createCollider(RAPIER.ColliderDesc.cuboid(0.9, 0.32, 1.82)
-    .setDensity(620).setFriction(0.7).setRestitution(0.02), carBody);
+    // Half-extents are used above; this density keeps the chassis near a realistic car mass.
+    .setDensity(330).setFriction(0.85).setRestitution(0.01), carBody);
+  const staticWheelLoad = carBody.mass() * 9.81 / 4;
 
   const ambientDust = new THREE.Group();
   scene.add(ambientDust);
@@ -444,7 +493,10 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       { x: -0.76, y: -0.52, z: 1.18, front: false, left: true },
       { x: 0.76, y: -0.52, z: 1.18, front: false, left: false }
     ];
-    const restLength = 0.4, spring = 14500, damper = 1800;
+    // Suspension length is the wheel-centre clearance above the sampled road.
+    // Preload each spring with one quarter of vehicle weight to prevent the old
+    // zero-load drop / hard spring compression / upward-launch cycle.
+    const restLength = 0.39, spring = 22000, damper = 3200;
     for (const wheel of wheelOffsets) {
       const arm = rotateLocal(wheel, rot);
       const wheelPos = add(pos, arm);
@@ -460,7 +512,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         y: lin.y + ang.z * arm.x - ang.x * arm.z,
         z: lin.z + ang.x * arm.y - ang.y * arm.x
       };
-      const springForce = clamp((restLength - suspensionLength) * spring - pointVelocity.y * damper, 0, 19000);
+      const springForce = clamp(staticWheelLoad + (restLength - suspensionLength) * spring - pointVelocity.y * damper, 0, 9000);
       const contactPoint = { x: origin.x, y: origin.y - distance, z: origin.z };
       carBody.addForceAtPoint({ x: 0, y: springForce, z: 0 }, contactPoint, true);
       let wheelForward = forward;
@@ -582,6 +634,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   }
   let frameAverageMs = 16.7;
   let qualityCheckAt = 0;
+  let qualityMode = "auto";
   function resize() {
     if (disposed) return;
     const width = Math.max(1, canvas.clientWidth || canvas.parentElement?.clientWidth || 800);
@@ -590,12 +643,31 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
   }
+  function graphicsCeiling() {
+    return qualityMode === "ultra"
+      ? maxPixelRatio
+      : Math.min(window.devicePixelRatio || 1, maxPixelRatio);
+  }
+  function setGraphicsMode(mode = "auto") {
+    qualityMode = mode === "ultra" ? "ultra" : "auto";
+    frameAverageMs = 16.7;
+    const nativeRatio = window.devicePixelRatio || 1;
+    const requested = qualityMode === "ultra"
+      ? Math.min(maxPixelRatio, Math.max(nativeRatio, mobileGPU ? 1.2 : 1.75))
+      : Math.min(nativeRatio, maxPixelRatio);
+    renderer.setPixelRatio(requested);
+    resize();
+    if (callbacks.onGraphicsMode) callbacks.onGraphicsMode(qualityMode, renderer.getPixelRatio());
+  }
   function adaptQuality(now, frameMs) {
     frameAverageMs += (frameMs - frameAverageMs) * 0.06;
-    if (now - qualityCheckAt < 1800) return;
+    if (now - qualityCheckAt < 1400) return;
     qualityCheckAt = now;
     const current = renderer.getPixelRatio();
-    const target = frameAverageMs > 23 ? Math.max(0.85, current - 0.15) : frameAverageMs < 15 ? Math.min(maxPixelRatio, current + 0.05) : current;
+    const floor = mobileGPU ? 0.75 : 0.85;
+    const ceiling = graphicsCeiling();
+    const target = frameAverageMs > 22 ? Math.max(floor, current - 0.15)
+      : frameAverageMs < 14.5 ? Math.min(ceiling, current + 0.06) : current;
     if (Math.abs(target - current) > 0.02) {
       renderer.setPixelRatio(target);
       resize();
@@ -651,7 +723,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   setScene("sunset");
   frameId = requestAnimationFrame(frame);
   return {
-    start, pause, resume, reset, setControls, setScene, setCarColour,
+    start, pause, resume, reset, setControls, setScene, setCarColour, setGraphicsMode,
     getTelemetry: () => ({ speed, score, best, damage, nearMisses, nitro, offRoad }),
     dispose
   };
