@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { chooseSafeTrafficLane, getOffRoadRecoveryForce, isTrafficImpact } from "../drive-rules.js";
 
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -46,7 +47,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v17/);
+  assert.match(worker, /airhand-shell-v18/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -101,7 +102,8 @@ test("3D car spawn uses a low-contact collider and cannot spring-launch at start
   assert.match(engine, /const tireLoad = staticWheelLoad \* 0\.25/);
   assert.doesNotMatch(engine, /const restLength = 0\.39, spring = 22000, damper = 3200/);
   assert.doesNotMatch(engine, /addForceAtPoint\(\{ x: 0, y: springForce, z: 0 \}/);
-  assert.match(engine, /const impactImpulse = clamp\(closingSpeed \* carBody\.mass\(\) \* 0\.1, 120, 1600\)/);
+  assert.match(engine, /const relativeImpactSpeed = Math\.hypot\(relativeVelocity\.x, relativeVelocity\.z\)/);
+  assert.match(engine, /const impactImpulse = clamp\(relativeImpactSpeed \* carBody\.mass\(\) \* 0\.1, 120, 1600\)/);
   assert.match(engine, /const overlapping = Math\.abs\(relativePosition\.x\) < 1\.72 && Math\.abs\(relativePosition\.z\) < 3\.45/);
 });
 
@@ -186,4 +188,69 @@ test("difficulty progresses gradually with score and laps, while steering and br
   assert.match(engine, /steeringResponse \+= \(controls\.steer - steeringResponse\) \* \(1 - Math\.exp\(-dt \* 7\.5\)\)/);
   assert.match(engine, /const brakingForce = Math\.min\(9200, 5200 \+ Math\.abs\(longitudinalSpeed\) \* 85\)/);
   assert.match(engine, /difficulty: Math\.round\(getDifficulty\(\) \* 100\) \/ 100/);
+});
+
+
+test("traffic impacts include rear-end, side-swipe, and deep overlap while ignoring harmless proximity", () => {
+  assert.equal(isTrafficImpact({
+    overlapping: true, playerSpeed: 22, longitudinalRelativeSpeed: -6,
+    lateralRelativeSpeed: 0, deeplyOverlapping: false
+  }), true, "a faster traffic car can strike the player from behind");
+  assert.equal(isTrafficImpact({
+    overlapping: true, playerSpeed: 14, longitudinalRelativeSpeed: 0.4,
+    lateralRelativeSpeed: -3.2, deeplyOverlapping: false
+  }), true, "a lane-change side impact is counted");
+  assert.equal(isTrafficImpact({
+    overlapping: true, playerSpeed: 6, longitudinalRelativeSpeed: 0.3,
+    lateralRelativeSpeed: 0.2, deeplyOverlapping: true
+  }), true, "deep overlap prevents cars passing through one another");
+  assert.equal(isTrafficImpact({
+    overlapping: false, playerSpeed: 22, longitudinalRelativeSpeed: 8,
+    lateralRelativeSpeed: 0, deeplyOverlapping: false
+  }), false, "nearby cars without overlap do not collide");
+  assert.equal(isTrafficImpact({
+    overlapping: true, playerSpeed: 2, longitudinalRelativeSpeed: 8,
+    lateralRelativeSpeed: 0, deeplyOverlapping: false
+  }), false, "stationary low-speed contact does not create damage");
+});
+
+test("off-road recovery pulls toward the track and damps outward lateral drift", () => {
+  assert.ok(getOffRoadRecoveryForce(4, 0) < 0, "right-side offset gets a leftward force");
+  assert.ok(getOffRoadRecoveryForce(-4, 0) > 0, "left-side offset gets a rightward force");
+  assert.ok(getOffRoadRecoveryForce(0, 4) < 0, "outward rightward drift is damped");
+  assert.ok(getOffRoadRecoveryForce(0, -4) > 0, "outward leftward drift is damped");
+  assert.equal(getOffRoadRecoveryForce(100, 0), -4500, "recovery force is capped");
+  assert.equal(getOffRoadRecoveryForce(-100, 0), 4500, "recovery force is capped symmetrically");
+});
+
+test("traffic changes only into a clear lane and waits when every lane is occupied", () => {
+  const item = { t: 0.1, lane: -3.8, laneTarget: -3.8, homeLane: -3.8 };
+  const base = {
+    currentLane: -3.8,
+    candidates: [-3.8, 0, 3.8],
+    item,
+    totalLength: 1000,
+    playerClosing: true,
+    gapToPlayer: 12,
+    playerLaneOffset: -3.8
+  };
+  const trafficWithMiddleBlocked = [
+    item,
+    { t: 0.11, lane: 0, laneTarget: 0, homeLane: 0 }
+  ];
+  assert.equal(chooseSafeTrafficLane({ ...base, traffic: trafficWithMiddleBlocked }), 3.8);
+  const allAlternativesBlocked = [
+    ...trafficWithMiddleBlocked,
+    { t: 0.114, lane: 3.8, laneTarget: 3.8, homeLane: 3.8 }
+  ];
+  assert.equal(chooseSafeTrafficLane({ ...base, traffic: allAlternativesBlocked }), null);
+});
+
+test("game-over state is reset deliberately and cannot be resumed before reset", () => {
+  assert.match(engine, /let gameOver = false/);
+  assert.match(engine, /offRoad = false; gameOver = false; accumulator = 0/);
+  assert.match(engine, /if \(disposed \|\| gameOver\) return;/);
+  assert.match(engine, /if \(disposed \|\| gameOver\) return; running = true/);
+  assert.match(engine, /if \(damage >= 3 && !gameOver\)[\s\S]*?gameOver = true;\s*pause\(\)/);
+  assert.match(engine, /getTelemetry: \(\) => \(\{ speed, score, best, damage, nearMisses, laps, nitro, offRoad, gameOver/);
 });

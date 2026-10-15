@@ -1,5 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm";
+import { chooseSafeTrafficLane, getOffRoadRecoveryForce, isTrafficImpact } from "./drive-rules.js";
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const PALETTES = {
@@ -84,6 +85,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   let steeringResponse = 0;
   let hitCooldown = 0;
   let offRoad = false;
+  let gameOver = false;
   let lastTelemetryAt = 0;
   let traffic = [];
   let trees = [];
@@ -544,7 +546,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     if (frameId) cancelAnimationFrame(frameId);
     frameId = 0;
     speed = 0; score = 0; damage = 0; nearMisses = 0; nitro = 100; laps = 0; trackSampleIndex = 0;
-    hitCooldown = 0; offRoad = false; accumulator = 0; steeringResponse = 0;
+    hitCooldown = 0; offRoad = false; gameOver = false; accumulator = 0; steeringResponse = 0;
     controls = { steer: 0, throttle: false, brake: false, boost: false };
     const startPoint = trackCurve.getPointAt(0);
     previousCarPosition = { x: startPoint.x, z: startPoint.z };
@@ -596,8 +598,19 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const longitudinalSpeed = dot(velocity, forward);
     const lateralSpeed = dot(velocity, right);
     speed = Math.max(0, Math.abs(longitudinalSpeed) * 3.6);
-    const onTrack = nearestTrackDistance(pos.x, pos.z) < roadWidth * 0.54;
+    const nearest = nearestTrackSample(pos.x, pos.z);
+    const onTrack = nearest.distance < roadWidth * 0.54;
     offRoad = !onTrack;
+    let roadNormal = null;
+    let trackOffset = 0;
+    let lateralTrackSpeed = 0;
+    if (offRoad) {
+      const tangent = trackCurve.getTangentAt(nearest.index / trackSamples.length).normalize();
+      roadNormal = { x: -tangent.z, z: tangent.x };
+      const centre = trackSamples[nearest.index];
+      trackOffset = (pos.x - centre.x) * roadNormal.x + (pos.z - centre.z) * roadNormal.z;
+      lateralTrackSpeed = lin.x * roadNormal.x + lin.z * roadNormal.z;
+    }
     const surfaceGrip = onTrack ? (sceneName === "rain" ? 0.58 : 1) : 0.34;
     const boostActive = controls.boost && nitro > 0 && !controls.brake;
     if (boostActive) nitro = Math.max(0, nitro - dt * 28);
@@ -664,7 +677,13 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       y: 0,
       z: -lin.z * 10 - forward.z * aerodynamicDrag
     }, true);
-    if (offRoad) carBody.addForce(scale(forward, -longitudinalSpeed * 45), true);
+    if (offRoad) {
+      // Losing the road costs speed, while a capped lateral force gently guides
+      // the car back toward the centreline instead of leaving it stranded off-road.
+      carBody.addForce(scale(forward, -longitudinalSpeed * 45), true);
+      const recoveryForce = getOffRoadRecoveryForce(trackOffset, lateralTrackSpeed);
+      carBody.addForce({ x: roadNormal.x * recoveryForce, y: 0, z: roadNormal.z * recoveryForce }, true);
+    }
     if (hitCooldown > 0) hitCooldown -= dt;
     if (pos.y < -3 || Math.abs(pos.x) > 180 || Math.abs(pos.z) > 180) reset();
   }
@@ -743,23 +762,17 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       }
 
       if (item.laneCooldown <= 0 && (playerClosing || blockedAhead)) {
-        let bestLane = item.laneTarget;
-        let bestPenalty = Infinity;
-        for (const candidate of laneChoices) {
-          if (Math.abs(candidate - item.lane) < 1.0) continue;
-          let penalty = 0;
-          for (const other of traffic) {
-            if (other === item) continue;
-            const along = ((other.t - item.t + 1) % 1) * totalLength;
-            const separation = Math.min(along, totalLength - along);
-            if (separation < 19 && Math.abs(other.lane - candidate) < 2.3) penalty += 100;
-          }
-          if (playerClosing && gapToPlayer < 27 &&
-              Math.abs(candidate - playerLaneOffset) < 2.35) penalty += 80;
-          if (Math.abs(candidate - item.homeLane) > 0.1) penalty += 0.15;
-          if (penalty < bestPenalty) { bestPenalty = penalty; bestLane = candidate; }
-        }
-        if (bestLane !== item.laneTarget) {
+        const bestLane = chooseSafeTrafficLane({
+          currentLane: item.lane,
+          candidates: laneChoices,
+          traffic,
+          item,
+          totalLength,
+          playerClosing,
+          gapToPlayer,
+          playerLaneOffset
+        });
+        if (bestLane !== null && bestLane !== item.laneTarget) {
           item.laneTarget = bestLane;
           item.laneCooldown = playerClosing ? 2.2 : 1.8;
         }
@@ -791,6 +804,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const playerSpeed = Math.hypot(v.x, v.z);
     const inverseRotation = { x: -q.x, y: -q.y, z: -q.z, w: q.w };
     const playerForward = normalise(rotateLocal({ x: 0, y: 0, z: -1 }, q));
+    const playerRight = normalise(rotateLocal({ x: 1, y: 0, z: 0 }, q));
     for (const item of traffic) {
       const t = item.body.translation();
       const trafficVelocity = item.body.linvel();
@@ -799,10 +813,18 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       const relativePosition = rotateLocal({ x: t.x - p.x, y: 0, z: t.z - p.z }, inverseRotation);
       const relativeVelocity = { x: v.x - trafficVelocity.x, y: 0, z: v.z - trafficVelocity.z };
       const closingSpeed = relativeVelocity.x * playerForward.x + relativeVelocity.z * playerForward.z;
+      const lateralRelativeSpeed = relativeVelocity.x * playerRight.x + relativeVelocity.z * playerRight.z;
       const overlapping = Math.abs(relativePosition.x) < 1.72 && Math.abs(relativePosition.z) < 3.45;
       const passedFrontToBack = item.previousRelativeZ !== null &&
         item.previousRelativeZ < -0.5 && relativePosition.z >= -0.5;
-      if (overlapping && playerSpeed > 3 && closingSpeed > 2 && !item.hit && hitCooldown <= 0) {
+      const impactDetected = isTrafficImpact({
+        overlapping,
+        playerSpeed,
+        longitudinalRelativeSpeed: closingSpeed,
+        lateralRelativeSpeed,
+        deeplyOverlapping: Math.abs(relativePosition.x) < 1.15 && Math.abs(relativePosition.z) < 2.55
+      });
+      if (impactDetected && !item.hit && hitCooldown <= 0 && !gameOver) {
         item.hit = true;
         item.passed = true;
         damage += 1;
@@ -810,14 +832,17 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         const separationX = p.x - t.x;
         const separationZ = p.z - t.z;
         const separationLength = Math.max(0.001, Math.hypot(separationX, separationZ));
-        const impactImpulse = clamp(closingSpeed * carBody.mass() * 0.1, 120, 1600);
+        const relativeImpactSpeed = Math.hypot(relativeVelocity.x, relativeVelocity.z);
+        const impactImpulse = clamp(relativeImpactSpeed * carBody.mass() * 0.1, 120, 1600);
         carBody.applyImpulse({
           x: separationX / separationLength * impactImpulse,
           y: 0,
           z: separationZ / separationLength * impactImpulse
         }, true);
         if (callbacks.onCollision) callbacks.onCollision({ damage, remaining: Math.max(0, 3 - damage) });
-        if (damage >= 3) {
+        if (damage >= 3 && !gameOver) {
+          // Latch game-over before notifying UI so rapid inputs cannot restart physics.
+          gameOver = true;
           pause();
           if (callbacks.onGameOver) callbacks.onGameOver({ score: Math.floor(score), damage, nearMisses, laps });
         }
@@ -1015,7 +1040,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     renderer.render(scene, camera);
   }
   function start() {
-    if (disposed) return;
+    if (disposed || gameOver) return;
     if (frameId) cancelAnimationFrame(frameId);
     // Fail-safe on every fresh start, even if a caller skipped reset().
     keepCarGrounded();
@@ -1024,7 +1049,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     frameId = requestAnimationFrame(frame);
   }
   function pause() { paused = true; running = false; if (frameId) cancelAnimationFrame(frameId); frameId = 0; publishTelemetry(performance.now(), true); }
-  function resume() { if (disposed) return; running = true; paused = false; lastFrame = 0; if (!frameId) frameId = requestAnimationFrame(frame); }
+  function resume() { if (disposed || gameOver) return; running = true; paused = false; lastFrame = 0; if (!frameId) frameId = requestAnimationFrame(frame); }
   function dispose() {
     disposed = true; running = false; paused = true;
     if (frameId) cancelAnimationFrame(frameId);
@@ -1045,7 +1070,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   renderer.render(scene, camera);
   return {
     start, pause, resume, reset, setControls, setScene, setCarColour, setGraphicsMode,
-    getTelemetry: () => ({ speed, score, best, damage, nearMisses, laps, nitro, offRoad, difficulty: getDifficulty() }),
+    getTelemetry: () => ({ speed, score, best, damage, nearMisses, laps, nitro, offRoad, gameOver, difficulty: getDifficulty() }),
     dispose
   };
 }
