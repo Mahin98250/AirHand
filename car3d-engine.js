@@ -681,7 +681,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     frameAverageMs = 16.7;
     const nativeRatio = window.devicePixelRatio || 1;
     const requested = qualityMode === "ultra"
-      ? Math.min(maxPixelRatio, Math.max(nativeRatio, mobileGPU ? 1.2 : 1.75))
+      ? (mobileGPU ? Math.min(maxPixelRatio, Math.max(nativeRatio, 1.2)) : maxPixelRatio)
       : Math.min(nativeRatio, maxPixelRatio);
     renderer.setPixelRatio(requested);
     resize();
