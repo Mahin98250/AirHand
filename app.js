@@ -948,6 +948,7 @@ function activateVirtualTarget() {
 
 function switchMode(mode) {
   if (currentMode === "drive" && mode !== "drive") {
+    saveDriveBest();
     drive.playing = false;
     drive.paused = false;
     if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
@@ -1071,15 +1072,16 @@ function drawDriveCar(ctx, x, y, scale, color = "#43d8ff", steering = 0, player 
   ctx.restore();
 }
 function drawDriveTree(ctx, x, y, size, side, depth) {
+  const foliage = drive.scene === "night" ? ["#0b211f", "#10342f", "#194a39"] : drive.scene === "rain" ? ["#163b34", "#225647", "#2b6b4a"] : drive.scene === "coast" ? ["#2a5c4d", "#397a58", "#5b9b64"] : ["#183e36", "#255d43", "#347a50"];
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(size, size);
-  ctx.fillStyle = "#183e36";
+  ctx.fillStyle = foliage[0];
   ctx.beginPath(); ctx.ellipse(0, 4, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#684d3c";
+  ctx.fillStyle = drive.scene === "night" ? "#342f31" : "#684d3c";
   ctx.fillRect(-2.3, -12, 4.6, 18);
   for (let layer = 0; layer < 3; layer++) {
-    ctx.fillStyle = layer === 0 ? "#255d43" : layer === 1 ? "#347a50" : "#46915c";
+    ctx.fillStyle = foliage[Math.min(2, layer)];
     ctx.beginPath();
     const yy = -14 - layer * 9;
     ctx.moveTo(0, yy - 18); ctx.lineTo(-12 + layer * 2, yy + 4);
@@ -1258,6 +1260,22 @@ function renderDrive() {
     }
   }
   ctx.globalAlpha = 1;
+  if (scene.stars) {
+    // A soft headlight pool opens up the asphalt ahead during night driving.
+    const beamTopY = horizon + 7;
+    const beamBaseY = height * 0.84;
+    const beamTop = driveRoadGeometry(width, height, beamTopY);
+    const beamBase = driveRoadGeometry(width, height, beamBaseY);
+    const beam = ctx.createLinearGradient(0, beamBaseY, 0, beamTopY);
+    beam.addColorStop(0, "#c3eaff20"); beam.addColorStop(0.45, "#b0ddff0d"); beam.addColorStop(1, "#b0ddff00");
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(beamBase.center - beamBase.half * 0.42, beamBaseY);
+    ctx.lineTo(beamTop.center - beamTop.half * 0.15, beamTopY);
+    ctx.lineTo(beamTop.center + beamTop.half * 0.15, beamTopY);
+    ctx.lineTo(beamBase.center + beamBase.half * 0.42, beamBaseY);
+    ctx.closePath(); ctx.fill();
+  }
   // Traffic is sorted far-to-near so nearby vehicles correctly sit on top of distant ones.
   const trafficByDepth = [...drive.traffic].sort((a, b) => a.depth - b.depth);
   for (const car of trafficByDepth) {
@@ -1932,7 +1950,7 @@ $("driveInvert").addEventListener("click", () => {
     : "Reverse steering OFF · turn right and check the HUD says RIGHT";
   showToast(driveSteering.inverted ? "Steering direction reversed." : "Steering direction restored.");
 });
-$("driveReset").addEventListener("click", () => { drive.playing = false; drive.paused = false; drive.braking = false; drive.throttle = false; drive.boosting = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("drivePause").textContent = "Ⅱ Pause"; $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Choose a scene, then start the engine. Cruise control is on by default; you can switch to manual throttle."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); updateDriveAudio(); renderDrive(); });
+$("driveReset").addEventListener("click", () => { saveDriveBest(); drive.playing = false; drive.paused = false; drive.braking = false; drive.throttle = false; drive.boosting = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("drivePause").textContent = "Ⅱ Pause"; $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Choose a scene, then start the engine. Cruise control is on by default; you can switch to manual throttle."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); updateDriveAudio(); renderDrive(); });
 function bindDriveHold(id, onPress, onRelease) {
   const button = $(id);
   if (!button) return;
@@ -2019,6 +2037,13 @@ video.addEventListener("loadedmetadata", fitCameraFrameToVideo);
 window.addEventListener("pagehide", () => {
   pageIsClosing = true;
   cancelAnimationFrame(gameFrameRequest);
+  if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
+  driveFrameRequest = 0;
+  saveDriveBest();
+  drive.playing = false;
+  drive.paused = false;
+  drive.boosting = false;
+  updateDriveAudio();
   stopCamera();
 });
 document.addEventListener("visibilitychange", () => {
