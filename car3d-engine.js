@@ -284,10 +284,10 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       const yaw = Math.atan2(-tangent.x, -tangent.z);
       const model = makeCarModel(trafficColours[i % trafficColours.length]);
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-      model.group.position.set(p.x, 0.05, p.z);
+      model.group.position.set(p.x, 0.35, p.z);
       model.group.quaternion.copy(q);
       const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(p.x, 0.68, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+        .setTranslation(p.x, 0.9, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
         .setLinearDamping(1.4).setAngularDamping(2.5));
       const collider = RAPIER.ColliderDesc.cuboid(0.94, 0.35, 1.8).setDensity(450).setFriction(0.8).setRestitution(0.05);
       world.createCollider(collider, body);
@@ -359,7 +359,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       p.addScaledVector(normal, i % 2 ? 1.8 : -1.8);
       const yaw = Math.atan2(-tangent.x, -tangent.z);
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-      item.body.setTranslation({ x: p.x, y: 0.68, z: p.z }, true);
+      item.body.setTranslation({ x: p.x, y: 0.9, z: p.z }, true);
       item.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
       item.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       item.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -398,7 +398,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const power = controls.throttle ? 6400 : 0;
     const boostPower = boostActive ? 3400 : 0;
     engineForce = power + boostPower;
-    if (longitudinalSpeed < maxSpeed && !controls.brake) {
+    if (longitudinalSpeed < (boostActive ? 68 : maxSpeed) && !controls.brake) {
       carBody.addForceAtPoint(scale(forward, engineForce * surfaceGrip), add(pos, rotateLocal({ x: 0, y: -0.18, z: 0.72 }, rot)), true);
     }
     if (controls.brake) {
