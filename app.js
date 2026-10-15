@@ -1867,7 +1867,26 @@ $("play").addEventListener("click", () => {
   if (game.playing && game.paused) resumeGame();
   else startGame();
 });
-$("drivePlay").addEventListener("click", () => { if (currentMode !== "drive") switchMode("drive"); startDrive(); });
+$("drivePlay").addEventListener("click", () => { if (currentMode !== "drive") switchMode("drive"); if (drive.playing && drive.paused) resumeDrive(); else startDrive(); });
+$("drivePause").addEventListener("click", () => { if (!drive.playing) { showToast("Start a drive first."); return; } if (drive.paused) resumeDrive(); else pauseDrive(); });
+$("driveCruise").addEventListener("click", () => {
+  drive.cruise = !drive.cruise;
+  $("driveCruise").setAttribute("aria-pressed", String(drive.cruise));
+  $("driveCruise").textContent = drive.cruise ? "Cruise control: ON" : "Cruise control: OFF";
+  showToast(drive.cruise ? "Cruise control enabled." : "Manual throttle enabled · hold GAS or W / ↑.");
+});
+$("driveScene").addEventListener("change", event => {
+  drive.scene = DRIVE_SCENES[event.target.value] ? event.target.value : "sunset";
+  renderDrive();
+  showToast("Scenery: " + DRIVE_SCENES[drive.scene].label);
+});
+document.querySelectorAll("[data-drive-car]").forEach(button => button.addEventListener("click", () => {
+  drive.carColor = button.dataset.driveCar;
+  document.querySelectorAll("[data-drive-car]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+  renderDrive();
+  showToast("Vehicle paint updated.");
+}));
+$("driveSound").addEventListener("click", () => setDriveSound(!drive.sound));
 $("driveCalibrate").addEventListener("click", calibrateDriveSteering);
 $("driveInvert").addEventListener("click", () => {
   if (!driveSteering) { showToast("Enable the camera first, then adjust steering direction."); return; }
@@ -1881,7 +1900,7 @@ $("driveInvert").addEventListener("click", () => {
     : "Reverse steering OFF · turn right and check the HUD says RIGHT";
   showToast(driveSteering.inverted ? "Steering direction reversed." : "Steering direction restored.");
 });
-$("driveReset").addEventListener("click", () => { drive.playing = false; drive.braking = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Show both hands like you are holding a steering wheel, then calibrate."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); renderDrive(); });
+$("driveReset").addEventListener("click", () => { drive.playing = false; drive.paused = false; drive.braking = false; drive.throttle = false; drive.boosting = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("drivePause").textContent = "Ⅱ Pause"; $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Choose a scene, then start the engine. Cruise control is on by default; you can switch to manual throttle."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); updateDriveAudio(); renderDrive(); });
 function bindDriveHold(id, onPress, onRelease) {
   const button = $(id);
   if (!button) return;
@@ -1907,6 +1926,8 @@ const restoreDriveHandSteering = () => {
 bindDriveHold("driveLeft", () => { driveKeyboardSteer = -0.85; drive.steer = -0.85; }, restoreDriveHandSteering);
 bindDriveHold("driveRight", () => { driveKeyboardSteer = 0.85; drive.steer = 0.85; }, restoreDriveHandSteering);
 bindDriveHold("driveBrake", () => { drive.braking = true; }, () => { drive.braking = false; });
+bindDriveHold("driveThrottle", () => { drive.throttle = true; }, () => { drive.throttle = false; });
+bindDriveHold("driveBoost", () => { if (drive.nitro > 1) drive.boosting = true; }, () => { drive.boosting = false; });
 
 document.querySelector(".gamebox").addEventListener("pointerdown", event => {
   // The overlay covers the canvas after a run ends; allow tapping its background to restart.
@@ -1922,9 +1943,19 @@ window.addEventListener("keydown", event => {
     drive.steer = driveKeyboardSteer;
     return;
   }
+  if (currentMode === "drive" && ["ArrowUp", "KeyW"].includes(event.code)) {
+    event.preventDefault(); drive.throttle = true; return;
+  }
+  if (currentMode === "drive" && ["ShiftLeft", "ShiftRight"].includes(event.code)) {
+    event.preventDefault(); if (drive.nitro > 1) drive.boosting = true; return;
+  }
   if (event.code === "Space" && currentMode === "drive") {
     event.preventDefault();
     if (!drive.playing) startDrive(); else { drive.braking = true; }
+    return;
+  }
+  if (event.key.toLowerCase() === "p" && currentMode === "drive" && drive.playing) {
+    if (drive.paused) resumeDrive(); else pauseDrive();
     return;
   }
   if (event.code === "Space" && currentMode === "game") {
@@ -1943,9 +1974,11 @@ window.addEventListener("keydown", event => {
 });
 window.addEventListener("keyup", event => {
   if (currentMode === "drive" && ["ArrowLeft", "ArrowRight", "KeyA", "KeyD"].includes(event.code)) { driveKeyboardSteer = null; drive.steer = driveSteering?.value ?? 0; }
+  if (currentMode === "drive" && ["ArrowUp", "KeyW"].includes(event.code)) drive.throttle = false;
+  if (currentMode === "drive" && ["ShiftLeft", "ShiftRight"].includes(event.code)) drive.boosting = false;
   if (currentMode === "drive" && event.code === "Space") drive.braking = false;
 });
-window.addEventListener("blur", () => { driveKeyboardSteer = null; drive.braking = false; document.querySelectorAll(".drive-pad button").forEach(button => button.classList.remove("active")); if (currentMode === "drive") drive.steer = driveSteering?.value ?? 0; });
+window.addEventListener("blur", () => { driveKeyboardSteer = null; drive.braking = false; drive.throttle = false; drive.boosting = false; document.querySelectorAll(".drive-pad button").forEach(button => button.classList.remove("active")); if (currentMode === "drive") drive.steer = driveSteering?.value ?? 0; updateDriveAudio(); });
 window.addEventListener("resize", () => { resizeCanvases(); fitDriveCanvas(); renderDrive(); });
 window.addEventListener("pageshow", () => {
   if (cameraActive && mediaStream?.getVideoTracks().every(track => track.readyState === "ended")) handleCameraTrackEnded();
