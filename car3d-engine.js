@@ -429,6 +429,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   function setCarColour(colour) {
     carColour = colour;
     if (playerModel.paint) playerModel.paint.color.set(colour);
+    if (!running && !disposed) renderer.render(scene, camera);
   }
   function setScene(name) {
     sceneName = PALETTES[name] ? name : "sunset";
@@ -446,9 +447,12 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     scene.fog.near = sceneName === "night" ? 38 : 70;
     scene.fog.far = sceneName === "night" ? 155 : 240;
     if (callbacks.onScene) callbacks.onScene(sceneName);
+    if (!running && !disposed) renderer.render(scene, camera);
   }
 
   function reset() {
+    if (frameId) cancelAnimationFrame(frameId);
+    frameId = 0;
     speed = 0; score = 0; damage = 0; nearMisses = 0; nitro = 100;
     hitCooldown = 0; offRoad = false; accumulator = 0; controls = { steer: 0, throttle: false, brake: false, boost: false };
     const startPoint = trackCurve.getPointAt(0);
@@ -476,6 +480,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     paused = true; running = false;
     syncVisuals();
     publishTelemetry(performance.now(), true);
+    if (!disposed) renderer.render(scene, camera);
   }
 
   function setControls(next = {}) {
@@ -670,6 +675,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    if (!running && !disposed) renderer.render(scene, camera);
   }
   function graphicsCeiling() {
     return qualityMode === "ultra"
@@ -749,7 +755,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   window.addEventListener("resize", resize);
   reset();
   setScene("sunset");
-  frameId = requestAnimationFrame(frame);
+  renderer.render(scene, camera);
   return {
     start, pause, resume, reset, setControls, setScene, setCarColour, setGraphicsMode,
     getTelemetry: () => ({ speed, score, best, damage, nearMisses, nitro, offRoad }),
