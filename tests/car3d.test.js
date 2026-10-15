@@ -17,6 +17,8 @@ test("3D engine uses Three.js and Rapier rigid-body physics", () => {
   assert.match(engine, /addForceAtPoint/);
   assert.match(engine, /applyTorqueImpulse/);
   assert.match(engine, /ColliderDesc\.cuboid/);
+  assert.match(engine, /kinematicPositionBased/);
+  assert.match(engine, /function advanceTraffic/);
 });
 
 test("Air Drive has a selectable 3D canvas and accessible mode status", () => {
@@ -44,7 +46,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v6/);
+  assert.match(worker, /airhand-shell-v7/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
