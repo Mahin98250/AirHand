@@ -11,6 +11,7 @@ AirHand is a mobile-friendly browser app that turns webcam hand movements into a
 - **Full-frame camera preview** adjusts to the camera's actual aspect ratio and uses `object-fit: contain` to avoid clipping fingertips.
 - **Live framing guidance** tells you when your hand is near the frame edge or too close/small.
 - **Hand Runner arcade mode:** increasingly difficult obstacles, floating collectible stars, combo multipliers, bonus points, personal best, three pace settings and optional sound effects.
+- **Air Drive:** perspective road rendering with four selectable environments, custom car paint, two-hand steering, touch and keyboard controls, cruise/manual throttle, nitro boost, optional generated engine audio, near-miss rewards, and three-hit vehicle damage.
 - **Mobile friendly inputs:** gesture control, tap/click and keyboard fallbacks, plus camera stop, mirror preview, landmarks and cursor response settings.
 - Camera frames and gesture inference stay in the browser; there is no video upload or app backend.
 
@@ -19,6 +20,17 @@ AirHand is a mobile-friendly browser app that turns webcam hand movements into a
 **Try AirHand:** https://mahin98250.github.io/AirHand/
 
 Source code: https://github.com/Mahin98250/AirHand
+
+## Air Drive controls
+
+- **Steering:** rotate your two hands after calibration, or use A/D, the left/right arrows, or the on-screen steering buttons.
+- **Acceleration:** cruise control starts enabled. Turn it off to use W / Up Arrow or hold **GAS** on the screen.
+- **Brake and nitro:** hold Space or the on-screen **BRAKE** button to slow down; hold Shift or **NITRO** for a short boost.
+- **Scenery and vehicle:** choose a sunset, coastal, night, or rain-soaked route and select a paint colour before or during a session.
+- **Driving feedback:** pass close to traffic for near-miss bonuses and nitro recharge. Three impacts end the session; resetting starts a fresh run.
+- **Pause and sound:** use P or the pause control, and enable the optional synthesised engine sound from the cockpit controls.
+
+Air Drive uses a custom perspective-rendered Canvas scene rather than a full 3D engine. The lighting, road, weather, motion and traffic are rendered in the browser without external game assets.
 
 ## Run it
 
