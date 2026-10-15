@@ -369,6 +369,81 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     }
     const rearLip = mesh(geometry(new THREE.BoxGeometry(1.4, 0.07, 0.24)), paint, group);
     rearLip.position.set(0, 0.95, 1.56);
+
+    // Detailed player-only sports-coupe bodywork. Traffic keeps the lighter model
+    // so visual fidelity does not multiply into hundreds of extra mobile draw calls.
+    if (isPlayer) {
+      const carbonMat = material(0x10171d, 0.42, 0.38);
+      const trimMat = material(0x202a33, 0.3, 0.72);
+      const chromeMat = material(0xc5d4df, 0.22, 0.88);
+      const brakeMat = material(0x555d66, 0.42, 0.72);
+      const caliperMat = material(0xf05b42, 0.36, 0.3);
+      const glassEdgeMat = material(0x0b1822, 0.2, 0.48);
+
+      // Sculpted front fascia: lower splitter, grille, side intakes and hood vents.
+      const splitter = mesh(geometry(new THREE.BoxGeometry(1.94, 0.075, 0.28)), carbonMat, group);
+      splitter.position.set(0, 0.245, -1.91);
+      const grille = mesh(geometry(new THREE.BoxGeometry(0.82, 0.2, 0.075)), trimMat, group);
+      grille.position.set(0, 0.405, -1.955);
+      for (const side of [-1, 1]) {
+        const intake = mesh(geometry(new THREE.BoxGeometry(0.34, 0.19, 0.08)), carbonMat, group);
+        intake.position.set(side * 0.68, 0.39, -1.94);
+        const vent = mesh(geometry(new THREE.BoxGeometry(0.34, 0.035, 0.26)), trimMat, group);
+        vent.position.set(side * 0.47, 0.885, -1.0);
+        vent.rotation.x = -0.08;
+        const sill = mesh(geometry(new THREE.BoxGeometry(0.16, 0.14, 2.42)), carbonMat, group);
+        sill.position.set(side * 0.91, 0.29, 0.02);
+        const doorHandle = mesh(geometry(new THREE.BoxGeometry(0.22, 0.035, 0.035)), chromeMat, group);
+        doorHandle.position.set(side * 0.966, 0.79, 0.37);
+        const sideMarker = mesh(geometry(new THREE.BoxGeometry(0.035, 0.07, 0.22)), headlightMat, group);
+        sideMarker.position.set(side * 0.965, 0.53, -1.55);
+        const exhaust = mesh(geometry(new THREE.CylinderGeometry(0.09, 0.09, 0.16, 12)), chromeMat, group);
+        exhaust.rotation.x = Math.PI / 2;
+        exhaust.position.set(side * 0.58, 0.29, 1.96);
+        const diffuserFin = mesh(geometry(new THREE.BoxGeometry(0.045, 0.12, 0.32)), trimMat, group);
+        diffuserFin.position.set(side * 0.48, 0.235, 1.79);
+      }
+
+      // Separate windshield and rear glass give the cabin more believable glazing.
+      const windshield = mesh(geometry(new THREE.BoxGeometry(1.25, 0.055, 0.66)), glassEdgeMat, group);
+      windshield.position.set(0, 1.105, -0.64);
+      windshield.rotation.x = -0.48;
+      const rearGlass = mesh(geometry(new THREE.BoxGeometry(1.2, 0.05, 0.55)), glassEdgeMat, group);
+      rearGlass.position.set(0, 1.105, 0.78);
+      rearGlass.rotation.x = 0.48;
+      const roofHighlight = mesh(geometry(new THREE.BoxGeometry(0.82, 0.018, 0.72)), material(0x7e9eae, 0.24, 0.42), group);
+      roofHighlight.position.set(0, 1.276, 0.03);
+
+      // Sport wheels: visible brake rotors, coloured calipers and five metal spokes.
+      for (const x of [-1, 1]) for (const z of [-1.23, 1.23]) {
+        const disc = mesh(geometry(new THREE.CylinderGeometry(0.255, 0.255, 0.035, 20)), brakeMat, group);
+        disc.rotation.z = Math.PI / 2;
+        disc.position.set(x * 0.965, 0.03, z);
+        const caliper = mesh(geometry(new THREE.BoxGeometry(0.075, 0.19, 0.11)), caliperMat, group);
+        caliper.position.set(x * 1.0, 0.12, z + 0.16);
+        const hub = mesh(geometry(new THREE.CylinderGeometry(0.075, 0.075, 0.31, 16)), chromeMat, group);
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(x * 1.105, 0.03, z);
+        for (let spokeIndex = 0; spokeIndex < 5; spokeIndex++) {
+          const spoke = mesh(geometry(new THREE.BoxGeometry(0.045, 0.31, 0.055)), chromeMat, group);
+          spoke.position.set(x * 1.11, 0.03, z);
+          spoke.rotation.x = spokeIndex * (Math.PI * 2 / 5);
+        }
+      }
+
+      // Rear light bar, boot lip and small aerodynamic fins.
+      const rearLightBar = mesh(geometry(new THREE.BoxGeometry(1.22, 0.075, 0.06)), tailLightMat, group);
+      rearLightBar.position.set(0, 0.72, 1.94);
+      const rearDiffuser = mesh(geometry(new THREE.BoxGeometry(1.48, 0.12, 0.24)), carbonMat, group);
+      rearDiffuser.position.set(0, 0.235, 1.83);
+      const spoiler = mesh(geometry(new THREE.BoxGeometry(1.38, 0.07, 0.24)), paint, group);
+      spoiler.position.set(0, 1.06, 1.73);
+      for (const side of [-1, 1]) {
+        const support = mesh(geometry(new THREE.BoxGeometry(0.055, 0.18, 0.07)), carbonMat, group);
+        support.position.set(side * 0.42, 1.0, 1.68);
+      }
+    }
+
     if (isPlayer) {
       const glow = new THREE.PointLight(0x79dfff, 1.3, 9);
       glow.position.set(0, 0.6, -2.2);

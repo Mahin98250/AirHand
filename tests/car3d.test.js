@@ -46,7 +46,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v14/);
+  assert.match(worker, /airhand-shell-v15/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -62,6 +62,19 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
   assert.match(engine, /mobileGPU \? 512 : 1024/);
 });
 
+
+test("player sports-car model includes detailed bodywork, glazing, brakes and aero", () => {
+  assert.match(engine, /Detailed player-only sports-coupe bodywork/);
+  assert.match(engine, /const splitter = mesh/);
+  assert.match(engine, /const grille = mesh/);
+  assert.match(engine, /const windshield = mesh/);
+  assert.match(engine, /const rearGlass = mesh/);
+  assert.match(engine, /const disc = mesh/);
+  assert.match(engine, /const caliper = mesh/);
+  assert.match(engine, /const rearLightBar = mesh/);
+  assert.match(engine, /const spoiler = mesh/);
+  assert.match(engine, /if \(isPlayer\) \{[\s\S]*?Sport wheels: visible brake rotors/);
+});
 
 test("3D start snaps the follow camera and reuses physics descriptors", () => {
   assert.match(engine, /const wheelOffsets = \[[\s\S]*?front: false, left: false \}\s*\];/);
