@@ -63,6 +63,16 @@ test("3D renderer includes real road collision and adaptive visual quality", () 
 });
 
 
+test("3D start snaps the follow camera and reuses physics descriptors", () => {
+  assert.match(engine, /const wheelOffsets = \[[\s\S]*?front: false, left: false \}\s*\];/);
+  assert.doesNotMatch(engine, /function applyCarPhysics\(dt\)[\s\S]*?const wheelOffsets = \[/);
+  assert.match(engine, /function syncVisuals\(snapCamera = false\)/);
+  assert.match(engine, /if \(snapCamera\) camera\.position\.copy\(tempV3\)/);
+  assert.match(engine, /tempV3b\.set\(p\.x \+ forward\.x \* 4, p\.y \+ 0\.8, p\.z \+ forward\.z \* 4\)/);
+  assert.match(engine, /function start\(\)[\s\S]*?keepCarGrounded\(\);\s*syncVisuals\(true\)/);
+  assert.match(engine, /keepCarGrounded\(\);\s*syncVisuals\(true\);\s*publishTelemetry/);
+});
+
 test("arcade physics locks vertical position and pitch/roll after each physics step", () => {
   assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*updateTrafficAndCollisions\(\)/);
   assert.match(engine, /function keepCarGrounded\(\)[\s\S]*?setTranslation\(\{ x: position\.x, y: 0\.9, z: position\.z \}, true\)/);
