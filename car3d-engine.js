@@ -286,12 +286,11 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
       model.group.position.set(p.x, 0.35, p.z);
       model.group.quaternion.copy(q);
-      const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(p.x, 0.9, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
-        .setLinearDamping(1.4).setAngularDamping(2.5));
-      const collider = RAPIER.ColliderDesc.cuboid(0.94, 0.35, 1.8).setDensity(450).setFriction(0.8).setRestitution(0.05);
+      const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()
+        .setTranslation(p.x, 0.9, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }));
+      const collider = RAPIER.ColliderDesc.cuboid(0.94, 0.35, 1.8).setFriction(0.8).setRestitution(0.05);
       world.createCollider(collider, body);
-      traffic.push({ model, body, hit: false, passed: false, nearChecked: false });
+      traffic.push({ model, body, t, lane: side, cruiseSpeed: 5.5 + (i % 4) * 1.8, hit: false, passed: false, nearChecked: false });
     }
   }
   buildTraffic();
@@ -353,16 +352,17 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     traffic.forEach((item, i) => {
       item.hit = false; item.passed = false; item.nearChecked = false;
       const t = (0.07 + i * 0.071) % 1;
+      item.t = t;
       const p = trackCurve.getPointAt(t);
       const tangent = trackCurve.getTangentAt(t).normalize();
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
-      p.addScaledVector(normal, i % 2 ? 1.8 : -1.8);
+      p.addScaledVector(normal, item.lane);
       const yaw = Math.atan2(-tangent.x, -tangent.z);
       const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
       item.body.setTranslation({ x: p.x, y: 0.9, z: p.z }, true);
       item.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-      item.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      item.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      item.body.setNextKinematicTranslation({ x: p.x, y: 0.9, z: p.z });
+      item.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
     });
     paused = true; running = false;
     syncVisuals();
@@ -468,6 +468,21 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     return bestD;
   }
 
+  function advanceTraffic(dt) {
+    const totalLength = trackCurve.getLength();
+    for (const item of traffic) {
+      item.t = (item.t + item.cruiseSpeed * dt / totalLength) % 1;
+      const p = trackCurve.getPointAt(item.t);
+      const tangent = trackCurve.getTangentAt(item.t).normalize();
+      const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
+      p.addScaledVector(normal, item.lane);
+      const yaw = Math.atan2(-tangent.x, -tangent.z);
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      item.body.setNextKinematicTranslation({ x: p.x, y: 0.9, z: p.z });
+      item.body.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
+    }
+  }
+
   function updateTrafficAndCollisions() {
     const p = carBody.translation();
     const v = carBody.linvel();
@@ -552,6 +567,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       while (accumulator >= fixedStep && steps < 5) {
         world.timestep = fixedStep;
         applyCarPhysics(fixedStep);
+        advanceTraffic(fixedStep);
         world.step();
         updateTrafficAndCollisions();
         accumulator -= fixedStep;
