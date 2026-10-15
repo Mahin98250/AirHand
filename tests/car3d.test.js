@@ -81,3 +81,11 @@ test("Ultra rendering mode remains adaptive and repeated scenery uses instancing
   assert.match(app, /drive3dInstance\.setGraphicsMode/);
   assert.match(html, /id="driveGraphics"/);
 });
+
+
+test("paused 3D game does not keep scheduling animation frames", () => {
+  assert.match(engine, /if \(frameId\) cancelAnimationFrame\(frameId\);\s*frameId = 0;\s*speed = 0/);
+  assert.match(engine, /function start\(\)[\s\S]*?frameId = requestAnimationFrame\(frame\)/);
+  assert.match(engine, /function resume\(\)[\s\S]*?if \(!frameId\) frameId = requestAnimationFrame\(frame\)/);
+  assert.match(engine, /renderer\.render\(scene, camera\);\s*\}/);
+});
