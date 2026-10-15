@@ -91,6 +91,13 @@ test("paused 3D game does not keep scheduling animation frames", () => {
 });
 
 
+test("3D renderer suspends background work and resumes only an active run", () => {
+  assert.match(engine, /function handleVisibilityChange\(\)/);
+  assert.match(engine, /if \(document\.hidden\) \{[\s\S]*?cancelAnimationFrame\(frameId\)[\s\S]*?frameId = 0/);
+  assert.match(engine, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
+  assert.match(engine, /document\.removeEventListener\("visibilitychange", handleVisibilityChange\)/);
+});
+
 test("mobile graphics adapt shadow load and expose live performance telemetry", () => {
   assert.match(engine, /const maxPixelRatio = mobileGPU \? 1\.5 : 2\.5/);
   assert.match(engine, /function applyShadowQuality\(\)/);
