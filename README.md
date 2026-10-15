@@ -42,6 +42,13 @@ Air Drive includes two driving modes: a lightweight Canvas arcade mode and a 3D 
 - **Safety:** if the camera loses either hand, gesture pedals release. Touch and keyboard controls remain available as fallbacks.
 - **Dependencies:** the 3D engine loads Three.js and Rapier from jsDelivr on first use. The service worker caches same-origin game code and supported CDN responses after they have been fetched successfully, but a first-time 3D load requires internet access.
 
+### Graphics quality and stability
+
+- **Auto · Smooth** balances device pixel ratio and frame time for the current screen and GPU.
+- **Ultra · 4K-ready** requests a higher render resolution on capable devices. Native 4K is not guaranteed: physical display resolution, browser device-pixel ratio, GPU memory and frame time set the real limit.
+- Repeated trees, lane markings, hills and guardrails use instanced rendering to reduce draw calls. The 3D renderer adapts resolution downward if frame times rise.
+- The vehicle suspension uses a mass-based static spring preload and a more realistic chassis mass to avoid the old no-load drop and hard upward spring kick. It still needs physical testing across browsers and devices.
+
 ## Run it
 
 1. Open the repository with GitHub Pages enabled, or run a local static server in the repository directory.
