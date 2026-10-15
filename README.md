@@ -14,6 +14,12 @@ AirHand is a mobile-friendly browser app that turns webcam hand movements into a
 - **Mobile friendly inputs:** gesture control, tap/click and keyboard fallbacks, plus camera stop, mirror preview, landmarks and cursor response settings.
 - Camera frames and gesture inference stay in the browser; there is no video upload or app backend.
 
+## Live Demo
+
+**Try AirHand:** https://mahin98250.github.io/AirHand/
+
+Source code: https://github.com/Mahin98250/AirHand
+
 ## Run it
 
 1. Open the repository with GitHub Pages enabled, or run a local static server in the repository directory.
