@@ -645,6 +645,8 @@ function trackFrame(now) {
         drive.steer = steering.value;
         $("driveGuidance").textContent = "Need two hands · keep both hands visible";
       }
+      updateDriveGestureControls(hands, result.gestures);
+      syncDrive3DControls();
       renderDrive();
     }
     lastHandSeenAt = now;
@@ -687,6 +689,7 @@ function trackFrame(now) {
       const steering = driveSteering?.update(null, null, now);
       if (steering) drive.steer = steering.value;
       $("driveGuidance").textContent = "Need two hands · keep both hands visible";
+      updateDriveGestureControls(null, null);
     }
     // Brief model dropouts are common during fast movement. Preserve the last
     // state briefly, but never indefinitely; after the grace window release actions.
@@ -955,6 +958,8 @@ function activateVirtualTarget() {
 function switchMode(mode) {
   if (currentMode === "drive" && mode !== "drive") {
     saveDriveBest();
+    if (drive3dInstance) drive3dInstance.pause();
+    driveGestureThrottle = false; driveGestureBrake = false; driveGestureBoost = false;
     drive.playing = false;
     drive.paused = false;
     if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
@@ -2061,6 +2066,33 @@ $("play").addEventListener("click", () => {
 });
 $("drivePlay").addEventListener("click", () => { if (currentMode !== "drive") switchMode("drive"); if (drive.playing && drive.paused) resumeDrive(); else startDrive(); });
 $("drivePause").addEventListener("click", () => { if (!drive.playing) { showToast("Start a drive first."); return; } if (drive.paused) resumeDrive(); else pauseDrive(); });
+$("drive3dToggle").addEventListener("click", () => {
+  if (drive.playing) {
+    drive.playing = false; drive.paused = false;
+    if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
+    driveFrameRequest = 0;
+    if (drive3dInstance) drive3dInstance.pause();
+    $("driveOverlay").classList.remove("hidden");
+    $("driveTitle").textContent = "Driving mode changed";
+    $("driveText").textContent = "Choose your driving mode, then start a new session. The current run has been paused.";
+    $("drivePlay").textContent = "Start engine";
+  }
+  drive3dEnabled = !drive3dEnabled;
+  $("drive3dToggle").setAttribute("aria-pressed", String(drive3dEnabled));
+  $("drive3dToggle").textContent = drive3dEnabled ? "🚗 3D physics: ON" : "🚗 3D physics: OFF";
+  const box = $("driveCanvas").parentElement;
+  box.classList.toggle("drive-3d-active", drive3dEnabled && !!drive3dInstance);
+  if (drive3dEnabled) {
+    drive.cruise = false;
+    $("driveCruise").setAttribute("aria-pressed", "false");
+    $("driveCruise").textContent = "Cruise control: OFF";
+    $("drive3dStatus").textContent = drive3dInstance ? "3D physics ready · gestures and touch controls enabled" : "3D physics loads when you start the engine";
+    showToast("3D physics selected · two-hand steering, fist gas, open-palm brake, thumbs-up nitro.");
+  } else {
+    $("drive3dStatus").textContent = "Classic drive selected · no 3D physics loaded";
+    showToast("Classic drive selected.");
+  }
+});
 $("driveCruise").addEventListener("click", () => {
   drive.cruise = !drive.cruise;
   $("driveCruise").setAttribute("aria-pressed", String(drive.cruise));
@@ -2069,11 +2101,13 @@ $("driveCruise").addEventListener("click", () => {
 });
 $("driveScene").addEventListener("change", event => {
   drive.scene = DRIVE_SCENES[event.target.value] ? event.target.value : "sunset";
+  if (drive3dInstance) drive3dInstance.setScene(drive.scene);
   renderDrive();
   showToast("Scenery: " + DRIVE_SCENES[drive.scene].label);
 });
 document.querySelectorAll("[data-drive-car]").forEach(button => button.addEventListener("click", () => {
   drive.carColor = button.dataset.driveCar;
+  if (drive3dInstance) drive3dInstance.setCarColour(drive.carColor);
   document.querySelectorAll("[data-drive-car]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
   renderDrive();
   showToast("Vehicle paint updated.");
@@ -2092,7 +2126,7 @@ $("driveInvert").addEventListener("click", () => {
     : "Reverse steering OFF · turn right and check the HUD says RIGHT";
   showToast(driveSteering.inverted ? "Steering direction reversed." : "Steering direction restored.");
 });
-$("driveReset").addEventListener("click", () => { saveDriveBest(); drive.playing = false; drive.paused = false; drive.braking = false; drive.throttle = false; drive.boosting = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); $("drivePause").textContent = "Ⅱ Pause"; $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Choose a scene, then start the engine. Cruise control is on by default; you can switch to manual throttle."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); updateDriveAudio(); renderDrive(); });
+$("driveReset").addEventListener("click", () => { saveDriveBest(); if (drive3dInstance) drive3dInstance.pause(); drive.playing = false; drive.paused = false; drive.braking = false; drive.throttle = false; drive.boosting = false; driveGestureThrottle = false; driveGestureBrake = false; driveGestureBoost = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); if (drive3dEnabled && drive3dInstance) drive3dInstance.reset(); $("drivePause").textContent = "Ⅱ Pause"; $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Choose a scene, then start the engine. Cruise control is on by default; you can switch to manual throttle."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); updateDriveAudio(); syncDrive3DControls(); renderDrive(); });
 function bindDriveHold(id, onPress, onRelease) {
   const button = $(id);
   if (!button) return;
