@@ -1,6 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm";
-import { chooseSafeTrafficLane, getOffRoadRecoveryForce, isTrafficImpact } from "./drive-rules.js";
+import { chooseSafeTrafficLane, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D } from "./drive-rules.js";
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const PALETTES = {
@@ -605,9 +605,12 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     let trackOffset = 0;
     let lateralTrackSpeed = 0;
     if (offRoad) {
-      const tangent = trackCurve.getTangentAt(nearest.index / trackSamples.length).normalize();
+      const tangentStart = trackSamples[nearest.index];
+      const tangentEnd = trackSamples[(nearest.index + 1) % trackSamples.length];
+      const tangentLength = Math.max(0.001, Math.hypot(tangentEnd.x - tangentStart.x, tangentEnd.z - tangentStart.z));
+      const tangent = { x: (tangentEnd.x - tangentStart.x) / tangentLength, z: (tangentEnd.z - tangentStart.z) / tangentLength };
       roadNormal = { x: -tangent.z, z: tangent.x };
-      const centre = trackSamples[nearest.index];
+      const centre = nearest.point;
       trackOffset = (pos.x - centre.x) * roadNormal.x + (pos.z - centre.z) * roadNormal.z;
       lateralTrackSpeed = lin.x * roadNormal.x + lin.z * roadNormal.z;
     }
@@ -688,14 +691,22 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     if (pos.y < -3 || Math.abs(pos.x) > 180 || Math.abs(pos.z) > 180) reset();
   }
   function nearestTrackSample(x, z) {
-    let bestD = Infinity;
+    // Project onto centreline segments, not just vertices, to prevent recovery
+    // direction and off-road distance jumping between samples on tight bends.
+    let bestDistance = Infinity;
     let bestIndex = 0;
+    let bestPoint = { x, z };
     for (let i = 0; i < trackSamples.length; i++) {
-      const p = trackSamples[i];
-      const d = Math.hypot(x - p.x, z - p.z);
-      if (d < bestD) { bestD = d; bestIndex = i; }
+      const start = trackSamples[i];
+      const end = trackSamples[(i + 1) % trackSamples.length];
+      const projection = projectPointToSegment2D({ x, z }, start, end);
+      if (projection.distance < bestDistance) {
+        bestDistance = projection.distance;
+        bestIndex = i;
+        bestPoint = { x: projection.x, z: projection.z };
+      }
     }
-    return { index: bestIndex, distance: bestD };
+    return { index: bestIndex, distance: bestDistance, point: bestPoint };
   }
   function nearestTrackDistance(x, z) {
     return nearestTrackSample(x, z).distance;
@@ -805,6 +816,10 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const inverseRotation = { x: -q.x, y: -q.y, z: -q.z, w: q.w };
     const playerForward = normalise(rotateLocal({ x: 0, y: 0, z: -1 }, q));
     const playerRight = normalise(rotateLocal({ x: 1, y: 0, z: 0 }, q));
+    const playerYaw = Math.atan2(
+      2 * (q.w * q.y + q.x * q.z),
+      1 - 2 * (q.y * q.y + q.x * q.x)
+    );
     for (const item of traffic) {
       const t = item.body.translation();
       const trafficVelocity = item.body.linvel();
@@ -814,7 +829,15 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       const relativeVelocity = { x: v.x - trafficVelocity.x, y: 0, z: v.z - trafficVelocity.z };
       const closingSpeed = relativeVelocity.x * playerForward.x + relativeVelocity.z * playerForward.z;
       const lateralRelativeSpeed = relativeVelocity.x * playerRight.x + relativeVelocity.z * playerRight.z;
-      const overlapping = Math.abs(relativePosition.x) < 1.72 && Math.abs(relativePosition.z) < 3.45;
+      const trafficRotation = item.body.rotation();
+      const trafficYaw = Math.atan2(
+        2 * (trafficRotation.w * trafficRotation.y + trafficRotation.x * trafficRotation.z),
+        1 - 2 * (trafficRotation.y * trafficRotation.y + trafficRotation.x * trafficRotation.x)
+      );
+      const overlapping = orientedBoxesOverlap2D({
+        a: { x: p.x, z: p.z }, yawA: playerYaw, halfWidthA: 0.9, halfLengthA: 1.82,
+        b: { x: t.x, z: t.z }, yawB: trafficYaw, halfWidthB: 0.94, halfLengthB: 1.8
+      });
       const passedFrontToBack = item.previousRelativeZ !== null &&
         item.previousRelativeZ < -0.5 && relativePosition.z >= -0.5;
       const impactDetected = isTrafficImpact({
@@ -822,7 +845,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         playerSpeed,
         longitudinalRelativeSpeed: closingSpeed,
         lateralRelativeSpeed,
-        deeplyOverlapping: Math.abs(relativePosition.x) < 1.15 && Math.abs(relativePosition.z) < 2.55
+        deeplyOverlapping: overlapping &&
+          Math.abs(relativePosition.x) < 1.15 && Math.abs(relativePosition.z) < 2.55
       });
       if (impactDetected && !item.hit && hitCooldown <= 0 && !gameOver) {
         item.hit = true;

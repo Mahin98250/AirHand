@@ -4,6 +4,43 @@
  */
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
+export function projectPointToSegment2D(point, start, end) {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const lengthSquared = dx * dx + dz * dz;
+  const t = lengthSquared > 1e-9
+    ? clamp(((point.x - start.x) * dx + (point.z - start.z) * dz) / lengthSquared, 0, 1)
+    : 0;
+  const x = start.x + dx * t;
+  const z = start.z + dz * t;
+  return { x, z, t, distance: Math.hypot(point.x - x, point.z - z) };
+}
+
+/** Exact 2D separating-axis test for two oriented rectangular vehicle footprints. */
+export function orientedBoxesOverlap2D({
+  a, yawA, halfWidthA, halfLengthA,
+  b, yawB, halfWidthB, halfLengthB
+}) {
+  const axes = [
+    { x: Math.cos(yawA), z: -Math.sin(yawA) },
+    { x: Math.sin(yawA), z: Math.cos(yawA) },
+    { x: Math.cos(yawB), z: -Math.sin(yawB) },
+    { x: Math.sin(yawB), z: Math.cos(yawB) }
+  ];
+  const delta = { x: b.x - a.x, z: b.z - a.z };
+  for (const axis of axes) {
+    const distance = Math.abs(delta.x * axis.x + delta.z * axis.z);
+    const radiusA =
+      halfWidthA * Math.abs(Math.cos(yawA) * axis.x - Math.sin(yawA) * axis.z) +
+      halfLengthA * Math.abs(Math.sin(yawA) * axis.x + Math.cos(yawA) * axis.z);
+    const radiusB =
+      halfWidthB * Math.abs(Math.cos(yawB) * axis.x - Math.sin(yawB) * axis.z) +
+      halfLengthB * Math.abs(Math.sin(yawB) * axis.x + Math.cos(yawB) * axis.z);
+    if (distance > radiusA + radiusB) return false;
+  }
+  return true;
+}
+
 export function isTrafficImpact({
   overlapping,
   playerSpeed,

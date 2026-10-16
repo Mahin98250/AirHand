@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { chooseSafeTrafficLane, getOffRoadRecoveryForce, isTrafficImpact } from "../drive-rules.js";
+import { chooseSafeTrafficLane, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D } from "../drive-rules.js";
 
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -104,7 +104,7 @@ test("3D car spawn uses a low-contact collider and cannot spring-launch at start
   assert.doesNotMatch(engine, /addForceAtPoint\(\{ x: 0, y: springForce, z: 0 \}/);
   assert.match(engine, /const relativeImpactSpeed = Math\.hypot\(relativeVelocity\.x, relativeVelocity\.z\)/);
   assert.match(engine, /const impactImpulse = clamp\(relativeImpactSpeed \* carBody\.mass\(\) \* 0\.1, 120, 1600\)/);
-  assert.match(engine, /const overlapping = Math\.abs\(relativePosition\.x\) < 1\.72 && Math\.abs\(relativePosition\.z\) < 3\.45/);
+  assert.match(engine, /const overlapping = orientedBoxesOverlap2D\(/);
 });
 
 test("Ultra rendering mode remains adaptive and repeated scenery uses instancing", () => {
@@ -167,7 +167,7 @@ test("3D driving uses speed-limited acceleration, bicycle-model steering, and di
 
 test("traffic collisions use oriented overlap and near-misses require an actual pass", () => {
   assert.match(engine, /const relativePosition = rotateLocal/);
-  assert.match(engine, /const overlapping = Math\.abs\(relativePosition\.x\) < 1\.72 && Math\.abs\(relativePosition\.z\) < 3\.45/);
+  assert.match(engine, /const overlapping = orientedBoxesOverlap2D\(/);
   assert.match(engine, /const passedFrontToBack = item\.previousRelativeZ !== null/);
   assert.match(engine, /lateralGap >= 1\.72 && lateralGap < 2\.65/);
   assert.doesNotMatch(engine, /distance > 2\.6 && distance < 4\.2/);
@@ -253,4 +253,24 @@ test("game-over state is reset deliberately and cannot be resumed before reset",
   assert.match(engine, /if \(disposed \|\| gameOver\) return; running = true/);
   assert.match(engine, /if \(damage >= 3 && !gameOver\)[\s\S]*?gameOver = true;\s*pause\(\)/);
   assert.match(engine, /getTelemetry: \(\) => \(\{ speed, score, best, damage, nearMisses, laps, nitro, offRoad, gameOver/);
+});
+
+
+test("oriented collision footprints distinguish adjacent lanes and rotated overlaps", () => {
+  const box = { yawA: 0, halfWidthA: 0.9, halfLengthA: 1.82, yawB: 0, halfWidthB: 0.94, halfLengthB: 1.8 };
+  assert.equal(orientedBoxesOverlap2D({ ...box, a: { x: 0, z: 0 }, b: { x: 0, z: 3 } }), true);
+  assert.equal(orientedBoxesOverlap2D({ ...box, a: { x: 0, z: 0 }, b: { x: 3.8, z: 0 } }), false);
+  assert.equal(orientedBoxesOverlap2D({ ...box, a: { x: 0, z: 0 }, b: { x: 0, z: 3.8 } }), false);
+  assert.equal(orientedBoxesOverlap2D({ ...box, a: { x: 0, z: 0 }, yawA: Math.PI / 4, b: { x: 1.5, z: 1.5 }, yawB: -Math.PI / 4 }), true);
+});
+
+test("track projection returns the closest point on a segment and clamps at endpoints", () => {
+  assert.deepEqual(projectPointToSegment2D({ x: 4, z: 3 }, { x: 0, z: 0 }, { x: 10, z: 0 }),
+    { x: 4, z: 0, t: 0.4, distance: 3 });
+  assert.deepEqual(projectPointToSegment2D({ x: -2, z: 1 }, { x: 0, z: 0 }, { x: 10, z: 0 }),
+    { x: 0, z: 0, t: 0, distance: Math.sqrt(5) });
+  assert.deepEqual(projectPointToSegment2D({ x: 12, z: 0 }, { x: 0, z: 0 }, { x: 10, z: 0 }),
+    { x: 10, z: 0, t: 1, distance: 2 });
+  assert.match(engine, /Project onto centreline segments, not just vertices/);
+  assert.match(engine, /const centre = nearest\.point/);
 });
