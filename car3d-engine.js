@@ -1,6 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm";
-import { chooseSafeTrafficLane, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D } from "./drive-rules.js";
+import { chooseSafeTrafficLane, crossedStartLine, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D } from "./drive-rules.js";
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const PALETTES = {
@@ -719,11 +719,18 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       // Score is based on actual distance moved, not time spent holding a control.
       score += travelled * 0.8;
       const velocity = carBody.linvel();
-      const tangent = trackCurve.getTangentAt(nearest.index / trackSamples.length);
-      const forwardSpeed = velocity.x * tangent.x + velocity.z * tangent.z;
-      const wrappedForwardCrossing = trackSampleIndex > trackSamples.length * 0.75 &&
-        nearest.index < trackSamples.length * 0.25 && forwardSpeed > 4;
-      if (wrappedForwardCrossing) {
+      const startPoint = trackCurve.getPointAt(0);
+      const startTangent = trackCurve.getTangentAt(0).normalize();
+      const forwardSpeed = velocity.x * startTangent.x + velocity.z * startTangent.z;
+      const crossedFinish = crossedStartLine({
+        previous: previousCarPosition,
+        current: position,
+        start: startPoint,
+        tangent: { x: startTangent.x, z: startTangent.z },
+        speed: forwardSpeed,
+        halfWidth: roadWidth * 0.5
+      });
+      if (crossedFinish) {
         laps += 1;
         if (callbacks.onLap) callbacks.onLap({ laps, score: Math.floor(score) });
       }
