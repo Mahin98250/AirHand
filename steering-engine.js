@@ -21,6 +21,8 @@ export class SteeringController {
     this.value = 0;
     this.confidence = 0;
     this.lastSeenAt = 0;
+    this.lastUpdateAt = 0;
+    this.lastVelocity = 0;
   }
 
   static getPairAngle(first, second, minHandSpan = 0.12) {
@@ -45,10 +47,20 @@ export class SteeringController {
     const pair = SteeringController.getPairAngle(first, second, this.minHandSpan);
     if (!pair) {
       this.confidence = 0;
-      // Ease back toward center rather than snapping the car when a hand disappears.
-      this.value *= 0.72;
-      return { value: this.value, confidence: 0, detected: false, calibrated: this.neutralAngle !== null };
+      const elapsed = this.lastUpdateAt ? Math.max(0, Math.min(0.1, (now - this.lastUpdateAt) / 1000)) : 1 / 30;
+      this.lastUpdateAt = now;
+      const missingFor = this.lastSeenAt ? now - this.lastSeenAt : Infinity;
+      // Predict only a brief camera dropout, then smoothly settle steering to centre.
+      if (missingFor <= 90) this.value = clamp(this.value + this.lastVelocity * elapsed * 0.35, -0.82, 0.82);
+      else {
+        this.value += (0 - this.value) * (1 - Math.exp(-elapsed * 8));
+        this.lastVelocity *= Math.exp(-elapsed * 10);
+      }
+      return { value: this.value, confidence: 0, detected: false, calibrated: this.neutralAngle !== null, predicted: missingFor <= 90 };
     }
+    const previousValue = this.value;
+    const elapsed = this.lastUpdateAt ? Math.max(1 / 120, Math.min(0.1, (now - this.lastUpdateAt) / 1000)) : 1 / 30;
+    this.lastUpdateAt = now;
     this.lastSeenAt = now;
     if (this.neutralAngle === null) {
       this.neutralAngle = pair.angle;
@@ -63,10 +75,12 @@ export class SteeringController {
     // Default to direct mapping; offer a live switch for camera/mirror coordinate differences.
     const direction = this.inverted ? -1 : 1;
     const target = clamp(direction * corrected / this.maxTurnRadians, -1, 1);
-    const adaptiveSmoothing = Math.abs(target - this.value) > 0.35 ? Math.max(this.smoothing, 0.68) : this.smoothing;
-    this.value += (target - this.value) * adaptiveSmoothing;
+    const adaptiveSmoothing = Math.abs(target - this.value) > 0.35 ? Math.max(this.smoothing, 0.58) : this.smoothing;
+    const blend = 1 - Math.exp(-elapsed * adaptiveSmoothing * 28);
+    this.value += (target - this.value) * blend;
+    this.lastVelocity = clamp((this.value - previousValue) / elapsed, -4, 4);
     this.confidence = clamp((pair.span - this.minHandSpan) / 0.20, 0.4, 1);
-    return { value: this.value, confidence: this.confidence, detected: true, calibrated: true };
+    return { value: this.value, confidence: this.confidence, detected: true, calibrated: true, predicted: false };
   }
 
   reset() {
@@ -74,5 +88,7 @@ export class SteeringController {
     this.value = 0;
     this.confidence = 0;
     this.lastSeenAt = 0;
+    this.lastUpdateAt = 0;
+    this.lastVelocity = 0;
   }
 }
