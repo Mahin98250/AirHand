@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "../drive-rules.js";
+import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, getTargetYawRate, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "../drive-rules.js";
 
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -47,7 +47,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v20/);
+  assert.match(worker, /airhand-shell-v21/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -349,7 +349,7 @@ test("mobile UI has responsive controls and cruise control defaults off", () => 
   assert.match(html, /Cruise control: OFF/);
   assert.match(html, /@media\(max-width:760px\)/);
   assert.match(html, /min-height:42px/);
-  assert.match(worker, /airhand-shell-v20/);
+  assert.match(worker, /airhand-shell-v21/);
 });
 
 
@@ -372,5 +372,42 @@ test("mobile UI has responsive controls and cruise control defaults off", () => 
   assert.match(html, /Cruise control: OFF/);
   assert.match(html, /@media\(max-width:760px\)/);
   assert.match(html, /min-height:42px/);
-  assert.match(worker, /airhand-shell-v20/);
+  assert.match(worker, /airhand-shell-v21/);
+});
+
+
+test("Air Drive steering has the correct sign and a bounded yaw rate", () => {
+  assert.equal(getTargetYawRate(0, 1), 0, "stationary cars must not pivot from steering alone");
+  assert.equal(getTargetYawRate(0.4, 1), 0, "near-stationary steering stays stable");
+  assert.ok(getTargetYawRate(5, 1) < 0, "right input gives negative yaw while moving forward (-Z)");
+  assert.ok(getTargetYawRate(5, -1) > 0, "left input gives the opposite yaw");
+  assert.ok(getTargetYawRate(-5, 1) > 0, "reverse motion flips the yaw direction");
+  assert.equal(getTargetYawRate(8, 0), 0, "centred input does not command a turn");
+  assert.ok(Math.abs(getTargetYawRate(30, 1)) <= 1.05, "yaw target is capped");
+  assert.match(engine, /carBody\.setAngvel\(\{ x: 0, y: ang\.y \+ \(targetYawRate - ang\.y\) \* yawBlend, z: 0 \}, true\)/);
+});
+
+test("3D race starts at a safer speed with a consistent traffic clear zone", () => {
+  assert.match(engine, /const maxSpeed = 20/);
+  assert.match(engine, /const speedLimit = boostActive \? 27 : maxSpeed/);
+  assert.equal((engine.match(/\(0\.12 \+ i \* 0\.071\) % 1/g) || []).length, 2);
+  assert.match(app, /drive\.cruise = false/);
+  assert.match(app, /drive3dInstance\.setControls\(\{ steer: 0, throttle: false, brake: false, boost: false \}\)/);
+});
+
+test("gesture pedals require a stable pose and release if tracking fails", () => {
+  assert.match(app, /const DRIVE_PEDAL_CONFIRM_MS = 170/);
+  assert.match(app, /now - drivePedalCandidateSince >= DRIVE_PEDAL_CONFIRM_MS/);
+  assert.match(app, /!drive\.playing \|\| drive\.paused \|\| drive\.crashed/);
+  assert.match(app, /if \(currentMode === "drive"\) \{\s*driveLatestHands = null/);
+  assert.match(app, /updateDriveGestureControls\(null, null, now\)/);
+});
+
+test("camera follow and look target use frame-rate-independent smoothing", () => {
+  assert.match(engine, /let renderDt = 1 \/ 60/);
+  assert.match(engine, /renderDt = dt \|\| 1 \/ 60/);
+  assert.match(engine, /const cameraBlend = 1 - Math\.exp\(-renderDt \* 7\.5\)/);
+  assert.match(engine, /cameraLookAt\.lerp\(tempV3b, cameraBlend\)/);
+  assert.match(steering, /lastVelocity \* elapsed \* 0\.35/);
+  assert.match(steering, /missingFor <= 90/);
 });
