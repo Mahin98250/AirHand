@@ -75,6 +75,25 @@ export function isTrafficImpact({
  * signedOffset is positive to the right of the sampled track centreline.
  * Return a force along the track normal: opposite the offset and outward drift.
  */
+/**
+ * Reward only movement in the forward direction of the track while the car is
+ * on the road. Lateral drift, reversing and off-road shortcuts earn no distance score.
+ */
+export function getForwardTrackScoreDelta({ previous, current, tangent, onTrack, scale = 0.8 }) {
+  if (!onTrack || !previous || !current || !tangent) return 0;
+  const tangentLength = Math.hypot(tangent.x, tangent.z);
+  if (tangentLength < 1e-6 || !Number.isFinite(tangentLength)) return 0;
+  const dx = current.x - previous.x;
+  const dz = current.z - previous.z;
+  const forwardDistance = (dx * tangent.x + dz * tangent.z) / tangentLength;
+  return Math.max(0, forwardDistance) * Math.max(0, scale);
+}
+
+/** Keep a collision latched only while the two footprints remain in contact. */
+export function updateCollisionContactLatch({ overlapping, alreadyHit }) {
+  return Boolean(overlapping && alreadyHit);
+}
+
 export function getOffRoadRecoveryForce(signedOffset, lateralTrackSpeed) {
   const offset = Number.isFinite(signedOffset) ? signedOffset : 0;
   const lateralSpeed = Number.isFinite(lateralTrackSpeed) ? lateralTrackSpeed : 0;

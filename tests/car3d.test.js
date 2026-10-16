@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { chooseSafeTrafficLane, crossedStartLine, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D } from "../drive-rules.js";
+import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "../drive-rules.js";
 
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -47,7 +47,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v18/);
+  assert.match(worker, /airhand-shell-v19/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -160,7 +160,9 @@ test("3D driving uses speed-limited acceleration, bicycle-model steering, and di
   assert.match(engine, /Bicycle-model steering/);
   assert.match(engine, /const aerodynamicDrag = longitudinalSpeed \* Math\.abs\(longitudinalSpeed\) \* 0\.28/);
   assert.match(engine, /function updateTrackProgress\(\)/);
-  assert.match(engine, /score \+= travelled \* 0\.8/);
+  assert.match(engine, /score \+= getForwardTrackScoreDelta\(/);
+  assert.match(engine, /trackProgressT = nearest\.fraction/);
+  assert.match(engine, /const trackCenter = trackProgressPoint/);
   assert.match(engine, /const crossedFinish = crossedStartLine\(/);
   assert.match(engine, /if \(crossedFinish\) \{/);
   assert.match(engine, /laps, nitro: Math\.round\(nitro\)/);
@@ -179,6 +181,7 @@ test("traffic uses three safe lanes, reacts to closing player traffic, and chang
   assert.match(engine, /const side = \[-3\.8, 0, 3\.8\]\[i % 3\]/);
   assert.match(engine, /homeLane: side, laneTarget: side, laneCooldown: 0/);
   assert.match(engine, /const playerClosing = gapToPlayer > 4 && gapToPlayer < 34/);
+  assert.match(engine, /const playerT = trackProgressT/);
   assert.match(engine, /let blockedAhead = false/);
   assert.match(engine, /item\.lane \+= clamp\(item\.laneTarget - item\.lane, -2\.2 \* dt, 2\.2 \* dt\)/);
   assert.match(engine, /item\.t = \(item\.t \+ item\.cruiseSpeed \* difficulty \* dt \/ totalLength\) % 1/);
@@ -288,4 +291,40 @@ test("lap counting requires a forward start-line crossing inside track bounds", 
     "slow contact with the line must not count");
   assert.equal(crossedStartLine({ ...line, previous: { x: 0, z: -2 }, current: { x: 0, z: -3 } }), false,
     "moving along one side of the line must not count");
+});
+
+
+test("race score rewards forward road progress, not reversing or off-road movement", () => {
+  const tangent = { x: 1, z: 0 };
+  const previous = { x: 0, z: 0 };
+  assert.equal(getForwardTrackScoreDelta({ previous, current: { x: 5, z: 0 }, tangent, onTrack: true }), 4);
+  assert.equal(getForwardTrackScoreDelta({ previous, current: { x: -5, z: 0 }, tangent, onTrack: true }), 0,
+    "reversing earns no progress score");
+  assert.equal(getForwardTrackScoreDelta({ previous, current: { x: 0, z: 5 }, tangent, onTrack: true }), 0,
+    "sideways drift earns no progress score");
+  assert.equal(getForwardTrackScoreDelta({ previous, current: { x: 5, z: 0 }, tangent, onTrack: false }), 0,
+    "off-road shortcuts earn no distance score");
+  assert.equal(getForwardTrackScoreDelta({ previous, current: { x: 5, z: 5 }, tangent, onTrack: true }), 4,
+    "only the forward component contributes");
+  assert.equal(getForwardTrackScoreDelta({ previous, current: { x: 5, z: 0 }, tangent: { x: 0, z: 0 }, onTrack: true }), 0,
+    "invalid track direction fails safely");
+});
+
+test("collision damage can re-arm only after cars separate", () => {
+  assert.equal(updateCollisionContactLatch({ overlapping: true, alreadyHit: true }), true,
+    "continued overlap does not repeatedly damage the player");
+  assert.equal(updateCollisionContactLatch({ overlapping: false, alreadyHit: true }), false,
+    "separation resets the contact latch for a later crash");
+  assert.equal(updateCollisionContactLatch({ overlapping: false, alreadyHit: false }), false);
+  assert.match(engine, /item\.hit = updateCollisionContactLatch\(\{ overlapping, alreadyHit: item\.hit \}\)/);
+});
+
+test("track projection supplies sub-segment progress for traffic gap and lane calculations", () => {
+  assert.match(engine, /bestFraction = \(\(i \+ projection\.t\) % trackSamples\.length\) \/ trackSamples\.length/);
+  assert.match(engine, /const playerT = trackProgressT/);
+  assert.match(engine, /const trackCenter = trackProgressPoint/);
+});
+
+test("near-miss rewards are disabled while the player is off-road", () => {
+  assert.match(engine, /passedFrontToBack && !item\.passed && closingSpeed > 2 && playerSpeed > 9 && !offRoad/);
 });
