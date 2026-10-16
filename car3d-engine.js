@@ -1,6 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm";
-import { chooseSafeTrafficLane, crossedStartLine, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D } from "./drive-rules.js";
+import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "./drive-rules.js";
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const PALETTES = {
@@ -82,6 +82,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   let carColour = "#28bfea";
   let speed = 0, score = 0, best = 0, damage = 0, nearMisses = 0, nitro = 100;
   let laps = 0, trackSampleIndex = 0, previousCarPosition = null;
+  let trackProgressT = 0;
+  const trackProgressPoint = { x: 0, z: 0 };
   let steeringResponse = 0;
   let hitCooldown = 0;
   let offRoad = false;
@@ -549,6 +551,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     hitCooldown = 0; offRoad = false; gameOver = false; accumulator = 0; steeringResponse = 0;
     controls = { steer: 0, throttle: false, brake: false, boost: false };
     const startPoint = trackCurve.getPointAt(0);
+    trackProgressT = 0;
+    trackProgressPoint.x = startPoint.x; trackProgressPoint.z = startPoint.z;
     previousCarPosition = { x: startPoint.x, z: startPoint.z };
     carBody.setTranslation({ x: startPoint.x, y: 0.9, z: startPoint.z }, true);
     carBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -605,10 +609,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     let trackOffset = 0;
     let lateralTrackSpeed = 0;
     if (offRoad) {
-      const tangentStart = trackSamples[nearest.index];
-      const tangentEnd = trackSamples[(nearest.index + 1) % trackSamples.length];
-      const tangentLength = Math.max(0.001, Math.hypot(tangentEnd.x - tangentStart.x, tangentEnd.z - tangentStart.z));
-      const tangent = { x: (tangentEnd.x - tangentStart.x) / tangentLength, z: (tangentEnd.z - tangentStart.z) / tangentLength };
+      const curveTangent = trackCurve.getTangentAt(nearest.fraction).normalize();
+      const tangent = { x: curveTangent.x, z: curveTangent.z };
       roadNormal = { x: -tangent.z, z: tangent.x };
       const centre = nearest.point;
       trackOffset = (pos.x - centre.x) * roadNormal.x + (pos.z - centre.z) * roadNormal.z;
@@ -696,6 +698,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     let bestDistance = Infinity;
     let bestIndex = 0;
     let bestPoint = { x, z };
+    let bestFraction = 0;
     for (let i = 0; i < trackSamples.length; i++) {
       const start = trackSamples[i];
       const end = trackSamples[(i + 1) % trackSamples.length];
@@ -703,10 +706,11 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       if (projection.distance < bestDistance) {
         bestDistance = projection.distance;
         bestIndex = i;
+        bestFraction = ((i + projection.t) % trackSamples.length) / trackSamples.length;
         bestPoint = { x: projection.x, z: projection.z };
       }
     }
-    return { index: bestIndex, distance: bestDistance, point: bestPoint };
+    return { index: bestIndex, fraction: bestFraction, distance: bestDistance, point: bestPoint };
   }
   function nearestTrackDistance(x, z) {
     return nearestTrackSample(x, z).distance;
@@ -714,10 +718,18 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   function updateTrackProgress() {
     const position = carBody.translation();
     const nearest = nearestTrackSample(position.x, position.z);
+    const onTrack = nearest.distance < roadWidth * 0.54;
+    const tangentAtCar = trackCurve.getTangentAt(nearest.fraction).normalize();
     if (previousCarPosition) {
-      const travelled = Math.hypot(position.x - previousCarPosition.x, position.z - previousCarPosition.z);
-      // Score is based on actual distance moved, not time spent holding a control.
-      score += travelled * 0.8;
+      // Score forward progress along the course only: reversing, cutting across
+      // the grass, and sideways drift cannot inflate the distance score.
+      score += getForwardTrackScoreDelta({
+        previous: previousCarPosition,
+        current: position,
+        tangent: { x: tangentAtCar.x, z: tangentAtCar.z },
+        onTrack,
+        scale: 0.8
+      });
       const velocity = carBody.linvel();
       const startPoint = trackCurve.getPointAt(0);
       const startTangent = trackCurve.getTangentAt(0).normalize();
@@ -736,6 +748,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
       }
     }
     trackSampleIndex = nearest.index;
+    trackProgressT = nearest.fraction;
+    trackProgressPoint.x = nearest.point.x; trackProgressPoint.z = nearest.point.z;
     previousCarPosition = { x: position.x, z: position.z };
   }
 
@@ -750,8 +764,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     const playerPosition = carBody.translation();
     const playerVelocity = carBody.linvel();
     const playerSpeed = Math.hypot(playerVelocity.x, playerVelocity.z);
-    const playerT = trackSampleIndex / trackSamples.length;
-    const trackCenter = trackSamples[trackSampleIndex] || trackCurve.getPointAt(playerT);
+    const playerT = trackProgressT;
+    const trackCenter = trackProgressPoint;
     const trackTangent = trackCurve.getTangentAt(playerT).normalize();
     const trackNormal = new THREE.Vector3(-trackTangent.z, 0, trackTangent.x);
     const playerLaneOffset = (playerPosition.x - trackCenter.x) * trackNormal.x +
@@ -845,6 +859,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         a: { x: p.x, z: p.z }, yawA: playerYaw, halfWidthA: 0.9, halfLengthA: 1.82,
         b: { x: t.x, z: t.z }, yawB: trafficYaw, halfWidthB: 0.94, halfLengthB: 1.8
       });
+      item.hit = updateCollisionContactLatch({ overlapping, alreadyHit: item.hit });
       const passedFrontToBack = item.previousRelativeZ !== null &&
         item.previousRelativeZ < -0.5 && relativePosition.z >= -0.5;
       const impactDetected = isTrafficImpact({
@@ -877,7 +892,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
           pause();
           if (callbacks.onGameOver) callbacks.onGameOver({ score: Math.floor(score), damage, nearMisses, laps });
         }
-      } else if (passedFrontToBack && !item.passed && closingSpeed > 2 && playerSpeed > 9) {
+      } else if (passedFrontToBack && !item.passed && closingSpeed > 2 && playerSpeed > 9 && !offRoad) {
         item.passed = true;
         const lateralGap = Math.abs(relativePosition.x);
         if (lateralGap >= 1.72 && lateralGap < 2.65) {
