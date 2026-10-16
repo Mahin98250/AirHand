@@ -621,6 +621,13 @@ function trackFrame(now) {
         resetDwellProgress();
         lastStableGesture = "None";
       }
+      if (currentMode === "drive") {
+        driveLatestHands = null;
+        const steering = driveSteering?.update(null, null, now);
+        if (steering && driveKeyboardSteer === null) drive.steer = steering.value;
+        updateDriveGestureControls(null, null, now);
+        syncDrive3DControls();
+      }
       $("gesture").textContent = "Tracking interrupted";
       $("gestureConfidence").textContent = "Hand inference failed · retrying";
     }
@@ -647,7 +654,7 @@ function trackFrame(now) {
         drive.steer = steering.value;
         $("driveGuidance").textContent = "Need two hands · keep both hands visible";
       }
-      updateDriveGestureControls(hands, result.gestures);
+      updateDriveGestureControls(hands, result.gestures, now);
       syncDrive3DControls();
       renderDrive();
     }
@@ -691,7 +698,7 @@ function trackFrame(now) {
       const steering = driveSteering?.update(null, null, now);
       if (steering) drive.steer = steering.value;
       $("driveGuidance").textContent = "Need two hands · keep both hands visible";
-      updateDriveGestureControls(null, null);
+      updateDriveGestureControls(null, null, now);
     }
     // Brief model dropouts are common during fast movement. Preserve the last
     // state briefly, but never indefinitely; after the grace window release actions.
@@ -998,7 +1005,7 @@ function switchMode(mode) {
     drive.steer = 0;
     $("drivePause").textContent = "Ⅱ Pause";
     $("driveTitle").textContent = "Ready to drive?";
-    $("driveText").textContent = "Choose a scene, then start the engine. Cruise control is on by default; you can switch to manual throttle.";
+    $("driveText").textContent = "The car starts stationary. Hold GAS or W / ↑ to accelerate; enable cruise control manually when you are ready.";
     $("drivePlay").textContent = "Start engine";
     $("driveOverlay").classList.remove("hidden");
     updateDriveAudio();
@@ -1366,19 +1373,53 @@ function renderDrive() {
 }
 function syncDrive3DControls() {
   if (!drive3dEnabled || !drive3dInstance) return;
+  const activeRun = drive.playing && !drive.paused && !drive.crashed;
   drive3dInstance.setControls({
-    steer: drive.steer,
-    throttle: drive.playing && !drive.paused && (drive.cruise || drive.throttle || driveGestureThrottle),
-    brake: drive.braking || driveGestureBrake,
-    boost: drive.boosting || driveGestureBoost
+    steer: activeRun ? drive.steer : 0,
+    throttle: activeRun && (drive.cruise || drive.throttle || driveGestureThrottle),
+    brake: activeRun && (drive.braking || driveGestureBrake),
+    boost: activeRun && (drive.boosting || driveGestureBoost)
   });
 }
-function updateDriveGestureControls(hands, gestureResults) {
-  if (!drive3dEnabled) return;
-  if (!Array.isArray(hands) || hands.length < 2) {
+let drivePedalCandidate = "None";
+let drivePedalCandidateSince = 0;
+let drivePedalActive = "None";
+const DRIVE_PEDAL_CONFIRM_MS = 170;
+function clearDrivePedals() {
+  drivePedalCandidate = "None";
+  drivePedalCandidateSince = 0;
+  drivePedalActive = "None";
+  driveGestureThrottle = false;
+  driveGestureBrake = false;
+  driveGestureBoost = false;
+}
+function applyDrivePedalPose(pose, now) {
+  const validPose = ["Fist", "OpenPalm", "ThumbsUp"].includes(pose) ? pose : "None";
+  // An unclear or changing pose releases pedals immediately; a new command must
+  // persist over multiple camera updates before it is allowed to drive the car.
+  if (validPose === "None") {
+    clearDrivePedals();
+    return;
+  }
+  if (validPose !== drivePedalCandidate) {
+    drivePedalCandidate = validPose;
+    drivePedalCandidateSince = now;
+  }
+  if (validPose !== drivePedalActive) {
     driveGestureThrottle = false;
     driveGestureBrake = false;
     driveGestureBoost = false;
+    if (now - drivePedalCandidateSince >= DRIVE_PEDAL_CONFIRM_MS) drivePedalActive = validPose;
+  }
+  driveGestureThrottle = drivePedalActive === "Fist";
+  driveGestureBrake = drivePedalActive === "OpenPalm";
+  driveGestureBoost = drivePedalActive === "ThumbsUp";
+}
+function updateDriveGestureControls(hands, gestureResults, now = performance.now()) {
+  if (!drive3dEnabled) return;
+  if (!drive.playing || drive.paused || drive.crashed ||
+      !Array.isArray(hands) || hands.length < 2) {
+    clearDrivePedals();
     syncDrive3DControls();
     return;
   }
@@ -1395,9 +1436,7 @@ function updateDriveGestureControls(hands, gestureResults) {
     category?.categoryName || null,
     category?.score || 0
   ).gesture;
-  driveGestureThrottle = pedalPose === "Fist";
-  driveGestureBrake = pedalPose === "OpenPalm";
-  driveGestureBoost = pedalPose === "ThumbsUp";
+  applyDrivePedalPose(pedalPose, now);
   syncDrive3DControls();
 }
 async function ensureDrive3D() {
@@ -1561,12 +1600,19 @@ async function startDrive() {
   if (driveFrameRequest) cancelAnimationFrame(driveFrameRequest);
   driveFrameRequest = 0;
   drive.playing = true;
-  drive.paused = false;
+  drive.paused = !!drive3dEnabled; // Keep every input neutral while physics initializes.
   drive.crashed = false;
-  if (drive3dEnabled) drive.cruise = false;
+  drive.cruise = false;
   drive.braking = false;
   drive.throttle = false;
   drive.boosting = false;
+  driveGestureThrottle = false;
+  driveGestureBrake = false;
+  driveGestureBoost = false;
+  clearDrivePedals();
+  drive.steer = 0;
+  if (driveSteering) driveSteering.value = 0;
+  driveKeyboardSteer = null;
   drive.score = 0;
   drive.speed = 0;
   drive.roadOffset = 0;
@@ -1594,6 +1640,13 @@ async function startDrive() {
       startDrive();
       return;
     }
+    drive.throttle = false;
+    drive.braking = false;
+    drive.boosting = false;
+    clearDrivePedals();
+    drive.steer = 0;
+    drive.paused = false;
+    drive3dInstance.setControls({ steer: 0, throttle: false, brake: false, boost: false });
     drive3dInstance.setScene(drive.scene);
     drive3dInstance.setCarColour(drive.carColor);
     drive3dInstance.reset();
@@ -2147,7 +2200,7 @@ $("driveInvert").addEventListener("click", () => {
     : "Reverse steering OFF · turn right and check the HUD says RIGHT";
   showToast(driveSteering.inverted ? "Steering direction reversed." : "Steering direction restored.");
 });
-$("driveReset").addEventListener("click", () => { saveDriveBest(); if (drive3dInstance) drive3dInstance.pause(); drive.playing = false; drive.paused = false; drive.braking = false; drive.throttle = false; drive.boosting = false; driveGestureThrottle = false; driveGestureBrake = false; driveGestureBoost = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); if (drive3dEnabled && drive3dInstance) drive3dInstance.reset(); $("drivePause").textContent = "Ⅱ Pause"; $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "Choose a scene, then start the engine. Cruise control is on by default; you can switch to manual throttle."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); updateDriveAudio(); syncDrive3DControls(); renderDrive(); });
+$("driveReset").addEventListener("click", () => { saveDriveBest(); if (drive3dInstance) drive3dInstance.pause(); drive.playing = false; drive.paused = false; drive.braking = false; drive.throttle = false; drive.boosting = false; driveGestureThrottle = false; driveGestureBrake = false; driveGestureBoost = false; driveKeyboardSteer = null; drive.steer = 0; if (driveSteering) driveSteering.reset(); if (drive3dEnabled && drive3dInstance) drive3dInstance.reset(); $("drivePause").textContent = "Ⅱ Pause"; $("driveTitle").textContent = "Ready to drive?"; $("driveText").textContent = "The car starts stationary. Hold GAS or W / ↑ to accelerate; enable cruise control manually when you are ready."; $("drivePlay").textContent = "Start engine"; $("driveOverlay").classList.remove("hidden"); updateDriveAudio(); syncDrive3DControls(); renderDrive(); });
 function bindDriveHold(id, onPress, onRelease) {
   const button = $(id);
   if (!button) return;
