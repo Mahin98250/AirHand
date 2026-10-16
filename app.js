@@ -247,7 +247,7 @@ let inferenceErrorSince = 0;
 let fpsFrames = 0;
 let fpsWindowStart = 0;
 let currentMode = "cursor";
-const drive = { playing: false, paused: false, crashed: false, score: 0, best: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0, braking: false, throttle: false, cruise: true, boosting: false, nitro: 100, damage: 0, nearMisses: 0, combo: 0, shake: 0, scene: "sunset", carColor: "#28bfea", sound: false, audioContext: null, engineOsc: null, engineFilter: null, engineGain: null };
+const drive = { playing: false, paused: false, crashed: false, score: 0, best: 0, speed: 0, steer: 0, roadOffset: 0, spawnIn: 0.8, traffic: [], lastFrame: 0, lane: 0, braking: false, throttle: false, cruise: false, boosting: false, nitro: 100, damage: 0, nearMisses: 0, combo: 0, shake: 0, scene: "sunset", carColor: "#28bfea", sound: false, audioContext: null, engineOsc: null, engineFilter: null, engineGain: null };
 try { drive.best = Math.max(0, Number(localStorage.getItem("airhand-drive-best")) || 0); } catch { /* storage is optional */ }
 let drive3dEnabled = true;
 let drive3dLoading = false;
@@ -1368,7 +1368,7 @@ function syncDrive3DControls() {
   if (!drive3dEnabled || !drive3dInstance) return;
   drive3dInstance.setControls({
     steer: drive.steer,
-    throttle: drive.cruise || drive.throttle || driveGestureThrottle,
+    throttle: drive.playing && !drive.paused && (drive.cruise || drive.throttle || driveGestureThrottle),
     brake: drive.braking || driveGestureBrake,
     boost: drive.boosting || driveGestureBoost
   });
