@@ -16,6 +16,23 @@ export function projectPointToSegment2D(point, start, end) {
   return { x, z, t, distance: Math.hypot(point.x - x, point.z - z) };
 }
 
+/**
+ * True only when the car crosses the start/finish plane forwards, inside the
+ * track's lateral bounds. Position is measured in world X/Z; tangent is the
+ * normalized forward direction at the start point.
+ */
+export function crossedStartLine({ previous, current, start, tangent, speed, halfWidth }) {
+  if (!(speed > 4) || !previous || !current || !start || !tangent) return false;
+  const sideBefore = (previous.x - start.x) * tangent.x + (previous.z - start.z) * tangent.z;
+  const sideAfter = (current.x - start.x) * tangent.x + (current.z - start.z) * tangent.z;
+  if (!(sideBefore < 0 && sideAfter >= 0)) return false;
+  const fraction = sideBefore / (sideBefore - sideAfter);
+  const crossingX = previous.x + (current.x - previous.x) * fraction;
+  const crossingZ = previous.z + (current.z - previous.z) * fraction;
+  const lateral = (crossingX - start.x) * -tangent.z + (crossingZ - start.z) * tangent.x;
+  return Math.abs(lateral) <= halfWidth;
+}
+
 /** Exact 2D separating-axis test for two oriented rectangular vehicle footprints. */
 export function orientedBoxesOverlap2D({
   a, yawA, halfWidthA, halfLengthA,
