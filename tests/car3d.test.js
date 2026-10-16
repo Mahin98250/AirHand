@@ -16,7 +16,7 @@ test("3D engine uses Three.js and Rapier rigid-body physics", () => {
   assert.match(engine, /world\.step\(\)/);
   assert.match(engine, /world\.castRayAndGetNormal/);
   assert.match(engine, /addForceAtPoint/);
-  assert.match(engine, /applyTorqueImpulse/);
+  assert.match(engine, /carBody\.setAngvel/);
   assert.match(engine, /ColliderDesc\.cuboid/);
   assert.match(engine, /kinematicPositionBased/);
   assert.match(engine, /function advanceTraffic/);
@@ -31,11 +31,11 @@ test("Air Drive has a selectable 3D canvas and accessible mode status", () => {
 });
 
 test("hand gestures control throttle, brake, nitro and steering", () => {
-  assert.match(app, /driveGestureThrottle = pedalPose === "Fist"/);
-  assert.match(app, /driveGestureBrake = pedalPose === "OpenPalm"/);
-  assert.match(app, /driveGestureBoost = pedalPose === "ThumbsUp"/);
+  assert.match(app, /driveGestureThrottle = drivePedalActive === "Fist"/);
+  assert.match(app, /driveGestureBrake = drivePedalActive === "OpenPalm"/);
+  assert.match(app, /driveGestureBoost = drivePedalActive === "ThumbsUp"/);
   assert.match(app, /driveSteering\.update\(hands\[0\], hands\[1\], now\)/);
-  assert.match(app, /updateDriveGestureControls\(null, null\)/);
+  assert.match(app, /updateDriveGestureControls\(null, null, now\)/);
   assert.match(app, /drive3dInstance\.setControls/);
 });
 
@@ -81,7 +81,7 @@ test("3D start snaps the follow camera and reuses physics descriptors", () => {
   assert.match(engine, /const wheelOffsets = \[[\s\S]*?front: false, left: false \}\s*\];/);
   assert.doesNotMatch(engine, /function applyCarPhysics\(dt\)[\s\S]*?const wheelOffsets = \[/);
   assert.match(engine, /function syncVisuals\(snapCamera = false\)/);
-  assert.match(engine, /if \(snapCamera\) camera\.position\.copy\(tempV3\)/);
+  assert.match(engine, /if \(snapCamera \|\| !cameraHasLookTarget\) \{\s*camera\.position\.copy\(tempV3\)/);
   assert.match(engine, /tempV3b\.set\(p\.x \+ forward\.x \* 4, p\.y \+ 0\.8, p\.z \+ forward\.z \* 4\)/);
   assert.match(engine, /function start\(\)[\s\S]*?keepCarGrounded\(\);\s*syncVisuals\(true\)/);
   assert.match(engine, /keepCarGrounded\(\);\s*syncVisuals\(true\);\s*publishTelemetry/);
@@ -404,6 +404,7 @@ test("gesture pedals require a stable pose and release on inference failure", ()
 });
 
 test("chase camera is smoothed relative to elapsed frame time", () => {
+  const steering = readFileSync(new URL("../steering-engine.js", import.meta.url), "utf8");
   assert.match(engine, /let renderDt = 1 \/ 60/);
   assert.match(engine, /renderDt = dt \|\| 1 \/ 60/);
   assert.match(engine, /const cameraBlend = 1 - Math\.exp\(-renderDt \* 7\.5\)/);
