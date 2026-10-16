@@ -1,6 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm";
-import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "./drive-rules.js";
+import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, getTargetYawRate, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "./drive-rules.js";
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const PALETTES = {
@@ -70,6 +70,8 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   const disposableMaterials = new Set();
   const tempV3 = new THREE.Vector3();
   const tempV3b = new THREE.Vector3();
+  const cameraLookAt = new THREE.Vector3();
+  let cameraHasLookTarget = false;
   const tempQuat = new THREE.Quaternion();
   let disposed = false;
   let running = false;
@@ -77,6 +79,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   let frameId = 0;
   let lastFrame = 0;
   let accumulator = 0;
+  let renderDt = 1 / 60;
   let controls = { steer: 0, throttle: false, brake: false, boost: false };
   let sceneName = "sunset";
   let carColour = "#28bfea";
@@ -95,7 +98,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   let trackCurve;
   let carBody, carCollider, carRoot, frontWheels = [], allWheels = [];
   let engineForce = 0;
-  const maxSpeed = 28;
+  const maxSpeed = 20;
   const fixedStep = 1 / 60;
   // Reuse these descriptors every physics tick; recreating them at 60 Hz adds
   // needless short-lived objects and garbage collection pressure on mobile.
@@ -471,7 +474,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     traffic = [];
     const trafficColours = ["#ed6a5e", "#e7bd58", "#8496df", "#e9edf1", "#5fbd91", "#d69ae8"];
     for (let i = 0; i < 12; i++) {
-      const t = (0.13 + i * 0.071) % 1;
+      const t = (0.12 + i * 0.071) % 1;
       const p = trackCurve.getPointAt(t);
       const tangent = trackCurve.getTangentAt(t).normalize();
       const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
@@ -563,7 +566,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     traffic.forEach((item, i) => {
       item.hit = false; item.passed = false; item.previousRelativeZ = null;
       item.lane = item.homeLane; item.laneTarget = item.homeLane; item.laneCooldown = 0;
-      const t = (0.07 + i * 0.071) % 1;
+      const t = (0.12 + i * 0.071) % 1;
       item.t = t;
       const p = trackCurve.getPointAt(t);
       const tangent = trackCurve.getTangentAt(t).normalize();
@@ -621,11 +624,12 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     if (boostActive) nitro = Math.max(0, nitro - dt * 28);
     else nitro = Math.min(100, nitro + dt * 7.5);
     steeringResponse += (controls.steer - steeringResponse) * (1 - Math.exp(-dt * 7.5));
-    const speedLimit = boostActive ? 36 : maxSpeed;
-    const speedHeadroom = clamp((speedLimit - longitudinalSpeed) / 5, 0, 1);
-    // Controlled launch: avoid an abrupt force spike on a standing start.
-    const power = controls.throttle ? 2600 * speedHeadroom : 0;
-    const boostPower = boostActive ? 1500 * speedHeadroom : 0;
+    const speedLimit = boostActive ? 27 : maxSpeed;
+    const speedHeadroom = clamp((speedLimit - longitudinalSpeed) / 4, 0, 1);
+    // Progressive launch: no force is applied until the driver deliberately
+    // engages throttle; the lower cap leaves more reaction time near bends.
+    const power = controls.throttle ? 2300 * speedHeadroom : 0;
+    const boostPower = boostActive ? 1000 * speedHeadroom : 0;
     engineForce = power + boostPower;
     if (engineForce > 0 && !controls.brake) {
       carBody.addForceAtPoint(scale(forward, engineForce * surfaceGrip), add(pos, rotateLocal({ x: 0, y: -0.55, z: 0.72 }, rot)), true);
@@ -667,15 +671,11 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         carBody.addForceAtPoint(scale(wheelForward, -Math.sign(longitudinal) * tireLoad * 0.22), contactPoint, true);
       }
     }
-    // Bicycle-model steering: yaw rate follows speed and front-wheel angle, then
-    // tapers at high speed so a full-lock gesture cannot spin the car instantly.
-    const steerAuthority = clamp(1 - Math.abs(longitudinalSpeed) / 42, 0.52, 1);
-    // Bounded bicycle-model yaw: meaningful steering at low speed, less snap at speed.
-    const targetYawRate = Math.sign(longitudinalSpeed || 1) *
-      clamp(Math.abs(longitudinalSpeed) * Math.tan(Math.abs(steeringResponse) * 0.62) / 2.9 * steerAuthority, 0, 0.95) *
-      Math.sign(steeringResponse);
-    const yawError = clamp(targetYawRate - ang.y, -1.8, 1.8);
-    carBody.applyTorqueImpulse({ x: 0, y: yawError * dt * 95, z: 0 }, true);
+    // Damp yaw velocity directly toward a bounded bicycle-model target. This
+    // remains responsive on mobile and avoids weak torque being cancelled by tyre grip.
+    const targetYawRate = getTargetYawRate(longitudinalSpeed, steeringResponse);
+    const yawBlend = 1 - Math.exp(-dt * 6.5);
+    carBody.setAngvel({ x: 0, y: ang.y + (targetYawRate - ang.y) * yawBlend, z: 0 }, true);
 
     // Rolling resistance and aerodynamic drag oppose motion instead of applying
     // a meaningless downward force that was cancelled by the road-plane lock.
@@ -929,12 +929,19 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     });
     const forward = normalise(rotateLocal({ x: 0, y: 0, z: -1 }, q));
     tempV3.set(p.x - forward.x * 7.4, p.y + 3.2, p.z - forward.z * 7.4);
-    if (snapCamera) camera.position.copy(tempV3);
-    else camera.position.lerp(tempV3, 0.12);
     tempV3b.set(p.x + forward.x * 4, p.y + 0.8, p.z + forward.z * 4);
-    camera.lookAt(tempV3b);
-    const targetFov = 62 + clamp(speed / 42, 0, 1) * 4 + (controls.boost ? 1.5 : 0);
-    camera.fov += (targetFov - camera.fov) * 0.08;
+    const cameraBlend = 1 - Math.exp(-renderDt * 7.5);
+    if (snapCamera || !cameraHasLookTarget) {
+      camera.position.copy(tempV3);
+      cameraLookAt.copy(tempV3b);
+      cameraHasLookTarget = true;
+    } else {
+      camera.position.lerp(tempV3, cameraBlend);
+      cameraLookAt.lerp(tempV3b, cameraBlend);
+    }
+    camera.lookAt(cameraLookAt);
+    const targetFov = 62 + clamp(speed / 32, 0, 1) * 3.5 + (controls.boost ? 1 : 0);
+    camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-renderDt * 4.5));
     camera.updateProjectionMatrix();
   }
   function publishTelemetry(now, force = false) {
@@ -1066,6 +1073,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     frameId = requestAnimationFrame(frame);
     const frameMs = lastFrame ? now - lastFrame : 16.7;
     const dt = Math.min(0.05, Math.max(0, frameMs / 1000));
+    renderDt = dt || 1 / 60;
     lastFrame = now;
     adaptQuality(now, frameMs);
     if (running && !paused) {
