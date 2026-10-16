@@ -609,6 +609,12 @@ function trackFrame(now) {
     inferenceErrorSince = 0;
   } catch (error) {
     console.warn("Skipping a frame after inference error:", error);
+    // Release propulsion controls immediately on a bad inference frame. Steering
+    // alone may use its short bounded prediction window to avoid a hard twitch.
+    if (currentMode === "drive") {
+      clearDrivePedals();
+      syncDrive3DControls();
+    }
     if (!inferenceErrorSince) inferenceErrorSince = now;
     if (now - inferenceErrorSince >= INFERENCE_ERROR_GRACE_MS) {
       // A broken inference loop must not leave a pinch/drag latched forever.
@@ -1409,7 +1415,8 @@ function applyDrivePedalPose(pose, now) {
     driveGestureThrottle = false;
     driveGestureBrake = false;
     driveGestureBoost = false;
-    if (now - drivePedalCandidateSince >= DRIVE_PEDAL_CONFIRM_MS) drivePedalActive = validPose;
+    if (now - drivePedalCandidateSince < DRIVE_PEDAL_CONFIRM_MS) return;
+    drivePedalActive = validPose;
   }
   driveGestureThrottle = drivePedalActive === "Fist";
   driveGestureBrake = drivePedalActive === "OpenPalm";
