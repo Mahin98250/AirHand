@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { chooseSafeTrafficLane, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D } from "../drive-rules.js";
+import { chooseSafeTrafficLane, crossedStartLine, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D } from "../drive-rules.js";
 
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -273,4 +273,18 @@ test("track projection returns the closest point on a segment and clamps at endp
     { x: 10, z: 0, t: 1, distance: 2 });
   assert.match(engine, /Project onto centreline segments, not just vertices/);
   assert.match(engine, /const centre = nearest\.point/);
+});
+
+
+test("lap counting requires a forward start-line crossing inside track bounds", () => {
+  const line = { start: { x: 0, z: 0 }, tangent: { x: 0, z: -1 }, halfWidth: 5, speed: 12 };
+  assert.equal(crossedStartLine({ ...line, previous: { x: 0, z: 2 }, current: { x: 0, z: -2 } }), true);
+  assert.equal(crossedStartLine({ ...line, previous: { x: 0, z: -2 }, current: { x: 0, z: 2 } }), false,
+    "reverse crossing must not count");
+  assert.equal(crossedStartLine({ ...line, previous: { x: 8, z: 2 }, current: { x: 8, z: -2 } }), false,
+    "crossing outside road bounds must not count");
+  assert.equal(crossedStartLine({ ...line, speed: 3, previous: { x: 0, z: 2 }, current: { x: 0, z: -2 } }), false,
+    "slow contact with the line must not count");
+  assert.equal(crossedStartLine({ ...line, previous: { x: 0, z: -2 }, current: { x: 0, z: -3 } }), false,
+    "moving along one side of the line must not count");
 });
