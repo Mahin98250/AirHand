@@ -328,3 +328,26 @@ test("track projection supplies sub-segment progress for traffic gap and lane ca
 test("near-miss rewards are disabled while the player is off-road", () => {
   assert.match(engine, /passedFrontToBack && !item\.passed && closingSpeed > 2 && playerSpeed > 9 && !offRoad/);
 });
+
+
+test("Air Drive starts stationary with deliberate throttle and a safer speed cap", () => {
+  assert.match(app, /cruise: false/);
+  assert.match(app, /drive\.playing && !drive\.paused && \(drive\.cruise \|\| drive\.throttle \|\| driveGestureThrottle\)/);
+  assert.match(engine, /const maxSpeed = 28/);
+  assert.match(engine, /const power = controls\.throttle \? 2600 \* speedHeadroom : 0/);
+  assert.match(engine, /const t = \(0\.13 \+ i \* 0\.071\) % 1/);
+});
+
+test("hand steering smooths by elapsed time and predicts only brief dropouts", () => {
+  const steering = readFileSync(new URL("../steering-engine.js", import.meta.url), "utf8");
+  assert.match(steering, /const blend = 1 - Math\.exp\(-elapsed \* adaptiveSmoothing \* 28\)/);
+  assert.match(steering, /missingFor <= 90/);
+  assert.match(steering, /Math\.exp\(-elapsed \* 8\)/);
+});
+
+test("mobile UI has responsive controls and cruise control defaults off", () => {
+  assert.match(html, /Cruise control: OFF/);
+  assert.match(html, /@media\(max-width:760px\)/);
+  assert.match(html, /min-height:42px/);
+  assert.match(worker, /airhand-shell-v20/);
+});
