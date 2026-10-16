@@ -78,6 +78,34 @@ export function getTargetYawRate(longitudinalSpeed, steering, {
   return -Math.sign(speed) * Math.sign(input) * clamp(bicycleRate, 0, maxYawRate);
 }
 
+/**
+ * Clamp only velocity along the vehicle forward axis. Lateral drift and vertical
+ * motion are preserved; malformed inputs fail closed rather than propagating NaNs.
+ */
+export function clampLongitudinalVelocity({ velocity, forward, speedLimit }) {
+  const valid = velocity && forward &&
+    [velocity.x, velocity.y, velocity.z, forward.x, forward.z, speedLimit].every(Number.isFinite) &&
+    speedLimit >= 0;
+  if (!valid) return { x: 0, y: 0, z: 0 };
+
+  const forwardLength = Math.hypot(forward.x, forward.z);
+  if (forwardLength < 1e-9) return { x: velocity.x, y: velocity.y, z: velocity.z };
+
+  const fx = forward.x / forwardLength;
+  const fz = forward.z / forwardLength;
+  const longitudinal = velocity.x * fx + velocity.z * fz;
+  if (Math.abs(longitudinal) <= speedLimit) {
+    return { x: velocity.x, y: velocity.y, z: velocity.z };
+  }
+
+  const excess = longitudinal - Math.sign(longitudinal) * speedLimit;
+  return {
+    x: velocity.x - fx * excess,
+    y: velocity.y,
+    z: velocity.z - fz * excess
+  };
+}
+
 export function isTrafficImpact({
   overlapping,
   playerSpeed,

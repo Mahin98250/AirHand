@@ -1,6 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.17.3/+esm";
-import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, getTargetYawRate, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "./drive-rules.js";
+import { chooseSafeTrafficLane, clampLongitudinalVelocity, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, getTargetYawRate, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "./drive-rules.js";
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const PALETTES = {
@@ -1054,6 +1054,16 @@ export async function createCarGame3D(canvas, callbacks = {}) {
     carBody.setAngvel({ x: 0, y: angular.y, z: 0 }, true);
   }
 
+  function enforceLongitudinalSpeedLimit() {
+    const velocity = carBody.linvel();
+    const forward = rotateLocal({ x: 0, y: 0, z: -1 }, carBody.rotation());
+    const speedLimit = controls.boost && nitro > 0 && !controls.brake ? 27 : maxSpeed;
+    const limited = clampLongitudinalVelocity({ velocity, forward, speedLimit });
+    if (limited.x !== velocity.x || limited.y !== velocity.y || limited.z !== velocity.z) {
+      carBody.setLinvel(limited, true);
+    }
+  }
+
   function handleVisibilityChange() {
     if (document.hidden) {
       if (frameId) cancelAnimationFrame(frameId);
@@ -1086,6 +1096,7 @@ export async function createCarGame3D(canvas, callbacks = {}) {
         advanceTraffic(fixedStep);
         world.step();
         keepCarGrounded();
+        enforceLongitudinalSpeedLimit();
         updateTrackProgress();
         updateTrafficAndCollisions();
         accumulator -= fixedStep;
@@ -1100,8 +1111,14 @@ export async function createCarGame3D(canvas, callbacks = {}) {
   function start() {
     if (disposed || gameOver) return;
     if (frameId) cancelAnimationFrame(frameId);
-    // Fail-safe on every fresh start, even if a caller skipped reset().
+    // A fresh start must never inherit held pedals, residual velocity, or yaw.
+    controls = { steer: 0, throttle: false, brake: false, boost: false };
+    steeringResponse = 0;
+    engineForce = 0;
+    carBody.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    carBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
     keepCarGrounded();
+    accumulator = 0;
     syncVisuals(true);
     running = true; paused = false; lastFrame = 0;
     frameId = requestAnimationFrame(frame);
