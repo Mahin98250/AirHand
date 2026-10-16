@@ -83,7 +83,7 @@ test("3D start snaps the follow camera and reuses physics descriptors", () => {
   assert.match(engine, /function syncVisuals\(snapCamera = false\)/);
   assert.match(engine, /if \(snapCamera \|\| !cameraHasLookTarget\) \{\s*camera\.position\.copy\(tempV3\)/);
   assert.match(engine, /tempV3b\.set\(p\.x \+ forward\.x \* 4, p\.y \+ 0\.8, p\.z \+ forward\.z \* 4\)/);
-  assert.match(engine, /function start\(\)[\s\S]*?keepCarGrounded\(\);\s*syncVisuals\(true\)/);
+  assert.match(engine, /function start\(\)[\s\S]*?carBody\.setLinvel\(\{ x: 0, y: 0, z: 0 \}, true\);[\s\S]*?keepCarGrounded\(\);\s*accumulator = 0;\s*syncVisuals\(true\)/);
   assert.match(engine, /keepCarGrounded\(\);\s*syncVisuals\(true\);\s*publishTelemetry/);
 });
 
