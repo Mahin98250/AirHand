@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "../drive-rules.js";
+import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, getTargetYawRate, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "../drive-rules.js";
 
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -16,7 +16,7 @@ test("3D engine uses Three.js and Rapier rigid-body physics", () => {
   assert.match(engine, /world\.step\(\)/);
   assert.match(engine, /world\.castRayAndGetNormal/);
   assert.match(engine, /addForceAtPoint/);
-  assert.match(engine, /applyTorqueImpulse/);
+  assert.match(engine, /carBody\.setAngvel/);
   assert.match(engine, /ColliderDesc\.cuboid/);
   assert.match(engine, /kinematicPositionBased/);
   assert.match(engine, /function advanceTraffic/);
@@ -31,11 +31,11 @@ test("Air Drive has a selectable 3D canvas and accessible mode status", () => {
 });
 
 test("hand gestures control throttle, brake, nitro and steering", () => {
-  assert.match(app, /driveGestureThrottle = pedalPose === "Fist"/);
-  assert.match(app, /driveGestureBrake = pedalPose === "OpenPalm"/);
-  assert.match(app, /driveGestureBoost = pedalPose === "ThumbsUp"/);
+  assert.match(app, /driveGestureThrottle = drivePedalActive === "Fist"/);
+  assert.match(app, /driveGestureBrake = drivePedalActive === "OpenPalm"/);
+  assert.match(app, /driveGestureBoost = drivePedalActive === "ThumbsUp"/);
   assert.match(app, /driveSteering\.update\(hands\[0\], hands\[1\], now\)/);
-  assert.match(app, /updateDriveGestureControls\(null, null\)/);
+  assert.match(app, /updateDriveGestureControls\(null, null, now\)/);
   assert.match(app, /drive3dInstance\.setControls/);
 });
 
@@ -47,7 +47,7 @@ test("3D physics is paused or reset with the existing Air Drive lifecycle", () =
 });
 
 test("PWA caches the same-origin 3D module and can cache jsDelivr game dependencies", () => {
-  assert.match(worker, /airhand-shell-v20/);
+  assert.match(worker, /airhand-shell-v21/);
   assert.match(worker, /"\.\/car3d-engine\.js"/);
   assert.match(worker, /https:\/\/cdn\.jsdelivr\.net/);
   assert.match(worker, /is3DDependency && response\.type === "cors"/);
@@ -81,7 +81,7 @@ test("3D start snaps the follow camera and reuses physics descriptors", () => {
   assert.match(engine, /const wheelOffsets = \[[\s\S]*?front: false, left: false \}\s*\];/);
   assert.doesNotMatch(engine, /function applyCarPhysics\(dt\)[\s\S]*?const wheelOffsets = \[/);
   assert.match(engine, /function syncVisuals\(snapCamera = false\)/);
-  assert.match(engine, /if \(snapCamera\) camera\.position\.copy\(tempV3\)/);
+  assert.match(engine, /if \(snapCamera \|\| !cameraHasLookTarget\) \{\s*camera\.position\.copy\(tempV3\)/);
   assert.match(engine, /tempV3b\.set\(p\.x \+ forward\.x \* 4, p\.y \+ 0\.8, p\.z \+ forward\.z \* 4\)/);
   assert.match(engine, /function start\(\)[\s\S]*?keepCarGrounded\(\);\s*syncVisuals\(true\)/);
   assert.match(engine, /keepCarGrounded\(\);\s*syncVisuals\(true\);\s*publishTelemetry/);
@@ -332,10 +332,10 @@ test("near-miss rewards are disabled while the player is off-road", () => {
 
 test("Air Drive starts stationary with deliberate throttle and a safer speed cap", () => {
   assert.match(app, /cruise: false/);
-  assert.match(app, /drive\.playing && !drive\.paused && \(drive\.cruise \|\| drive\.throttle \|\| driveGestureThrottle\)/);
-  assert.match(engine, /const maxSpeed = 28/);
-  assert.match(engine, /const power = controls\.throttle \? 2600 \* speedHeadroom : 0/);
-  assert.match(engine, /const t = \(0\.13 \+ i \* 0\.071\) % 1/);
+  assert.match(app, /const activeRun = drive\.playing && !drive\.paused && !drive\.crashed/);
+  assert.match(engine, /const maxSpeed = 20/);
+  assert.match(engine, /const power = controls\.throttle \? 2300 \* speedHeadroom : 0/);
+  assert.match(engine, /const t = \(0\.12 \+ i \* 0\.071\) % 1/);
 });
 
 test("hand steering smooths by elapsed time and predicts only brief dropouts", () => {
@@ -349,16 +349,16 @@ test("mobile UI has responsive controls and cruise control defaults off", () => 
   assert.match(html, /Cruise control: OFF/);
   assert.match(html, /@media\(max-width:760px\)/);
   assert.match(html, /min-height:42px/);
-  assert.match(worker, /airhand-shell-v20/);
+  assert.match(worker, /airhand-shell-v21/);
 });
 
 
 test("Air Drive starts stationary with deliberate throttle and a safer speed cap", () => {
   assert.match(app, /cruise: false/);
-  assert.match(app, /drive\.playing && !drive\.paused && \(drive\.cruise \|\| drive\.throttle \|\| driveGestureThrottle\)/);
-  assert.match(engine, /const maxSpeed = 28/);
-  assert.match(engine, /const power = controls\.throttle \? 2600 \* speedHeadroom : 0/);
-  assert.match(engine, /const t = \(0\.13 \+ i \* 0\.071\) % 1/);
+  assert.match(app, /const activeRun = drive\.playing && !drive\.paused && !drive\.crashed/);
+  assert.match(engine, /const maxSpeed = 20/);
+  assert.match(engine, /const power = controls\.throttle \? 2300 \* speedHeadroom : 0/);
+  assert.match(engine, /const t = \(0\.12 \+ i \* 0\.071\) % 1/);
 });
 
 test("hand steering smooths by elapsed time and predicts only brief dropouts", () => {
@@ -372,5 +372,42 @@ test("mobile UI has responsive controls and cruise control defaults off", () => 
   assert.match(html, /Cruise control: OFF/);
   assert.match(html, /@media\(max-width:760px\)/);
   assert.match(html, /min-height:42px/);
-  assert.match(worker, /airhand-shell-v20/);
+  assert.match(worker, /airhand-shell-v21/);
+});
+
+
+test("Air Drive yaw response steers the correct direction and remains bounded", () => {
+  assert.equal(getTargetYawRate(0, 1), 0);
+  assert.equal(getTargetYawRate(0.4, 1), 0);
+  assert.ok(getTargetYawRate(5, 1) < 0);
+  assert.ok(getTargetYawRate(5, -1) > 0);
+  assert.ok(getTargetYawRate(-5, 1) > 0);
+  assert.equal(getTargetYawRate(8, 0), 0);
+  assert.ok(Math.abs(getTargetYawRate(30, 1)) <= 1.05);
+  assert.match(engine, /carBody\.setAngvel\(\{ x: 0, y: ang\.y \+ \(targetYawRate - ang\.y\) \* yawBlend, z: 0 \}, true\)/);
+});
+
+test("Air Drive launch speed, boost limit and traffic clearance stay safely bounded", () => {
+  assert.match(engine, /const maxSpeed = 20/);
+  assert.match(engine, /const speedLimit = boostActive \? 27 : maxSpeed/);
+  assert.match(engine, /const power = controls\.throttle \? 2300 \* speedHeadroom : 0/);
+  assert.match(app, /drive\.cruise = false/);
+  assert.match(app, /drive3dInstance\.setControls\(\{ steer: 0, throttle: false, brake: false, boost: false \}\)/);
+});
+
+test("gesture pedals require a stable pose and release on inference failure", () => {
+  assert.match(app, /const DRIVE_PEDAL_CONFIRM_MS = 170/);
+  assert.match(app, /now - drivePedalCandidateSince < DRIVE_PEDAL_CONFIRM_MS/);
+  assert.match(app, /!drive\.playing \|\| drive\.paused \|\| drive\.crashed/);
+  assert.match(app, /bad camera frame must immediately release propulsion/);
+  assert.match(app, /updateDriveGestureControls\(null, null, now\)/);
+});
+
+test("chase camera is smoothed relative to elapsed frame time", () => {
+  const steering = readFileSync(new URL("../steering-engine.js", import.meta.url), "utf8");
+  assert.match(engine, /let renderDt = 1 \/ 60/);
+  assert.match(engine, /renderDt = dt \|\| 1 \/ 60/);
+  assert.match(engine, /const cameraBlend = 1 - Math\.exp\(-renderDt \* 7\.5\)/);
+  assert.match(engine, /cameraLookAt\.lerp\(tempV3b, cameraBlend\)/);
+  assert.match(steering, /missingFor <= 90/);
 });

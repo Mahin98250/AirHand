@@ -40,6 +40,9 @@ export class SteeringController {
     this.neutralAngle = pair.angle;
     this.value = 0;
     this.confidence = 1;
+    this.lastSeenAt = 0;
+    this.lastUpdateAt = 0;
+    this.lastVelocity = 0;
     return true;
   }
 
