@@ -58,6 +58,25 @@ export function orientedBoxesOverlap2D({
   return true;
 }
 
+/**
+ * Signed arcade bicycle-model yaw target. Positive steering is a right-turn
+ * input while facing forward (-Z), so yaw is negative; reverse motion flips it.
+ */
+export function getTargetYawRate(longitudinalSpeed, steering, {
+  wheelbase = 2.9,
+  maxYawRate = 1.05,
+  minMovingSpeed = 0.75
+} = {}) {
+  if (!Number.isFinite(longitudinalSpeed) || !Number.isFinite(steering)) return 0;
+  const speed = longitudinalSpeed;
+  const input = clamp(steering, -1, 1);
+  if (Math.abs(speed) < minMovingSpeed || Math.abs(input) < 0.015) return 0;
+  const steerAuthority = clamp(1 - Math.abs(speed) / 36, 0.45, 1);
+  const bicycleRate = Math.abs(speed) * Math.tan(Math.abs(input) * 0.62) /
+    Math.max(0.5, wheelbase) * steerAuthority;
+  return -Math.sign(speed) * Math.sign(input) * clamp(bicycleRate, 0, maxYawRate);
+}
+
 export function isTrafficImpact({
   overlapping,
   playerSpeed,
