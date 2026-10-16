@@ -161,7 +161,8 @@ test("3D driving uses speed-limited acceleration, bicycle-model steering, and di
   assert.match(engine, /const aerodynamicDrag = longitudinalSpeed \* Math\.abs\(longitudinalSpeed\) \* 0\.28/);
   assert.match(engine, /function updateTrackProgress\(\)/);
   assert.match(engine, /score \+= travelled \* 0\.8/);
-  assert.match(engine, /wrappedForwardCrossing/);
+  assert.match(engine, /const crossedFinish = crossedStartLine\(/);
+  assert.match(engine, /if \(crossedFinish\) \{/);
   assert.match(engine, /laps, nitro: Math\.round\(nitro\)/);
 });
 
