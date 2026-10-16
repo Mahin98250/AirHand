@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { chooseSafeTrafficLane, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, getTargetYawRate, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "../drive-rules.js";
+import { chooseSafeTrafficLane, clampLongitudinalVelocity, crossedStartLine, getForwardTrackScoreDelta, getOffRoadRecoveryForce, getTargetYawRate, isTrafficImpact, orientedBoxesOverlap2D, projectPointToSegment2D, updateCollisionContactLatch } from "../drive-rules.js";
 
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
@@ -88,7 +88,7 @@ test("3D start snaps the follow camera and reuses physics descriptors", () => {
 });
 
 test("arcade physics locks vertical position and pitch/roll after each physics step", () => {
-  assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*updateTrackProgress\(\);\s*updateTrafficAndCollisions\(\)/);
+  assert.match(engine, /world\.step\(\);\s*keepCarGrounded\(\);\s*enforceLongitudinalSpeedLimit\(\);\s*updateTrackProgress\(\);\s*updateTrafficAndCollisions\(\)/);
   assert.match(engine, /function keepCarGrounded\(\)[\s\S]*?setTranslation\(\{ x: position\.x, y: 0\.9, z: position\.z \}, true\)/);
   assert.match(engine, /setLinvel\(\{ x: velocity\.x, y: 0, z: velocity\.z \}, true\)/);
   assert.match(engine, /setRotation\(\{ x: 0, y: Math\.sin\(yaw \/ 2\), z: 0, w: Math\.cos\(yaw \/ 2\) \}, true\)/);
@@ -410,4 +410,36 @@ test("chase camera is smoothed relative to elapsed frame time", () => {
   assert.match(engine, /const cameraBlend = 1 - Math\.exp\(-renderDt \* 7\.5\)/);
   assert.match(engine, /cameraLookAt\.lerp\(tempV3b, cameraBlend\)/);
   assert.match(steering, /missingFor <= 90/);
+});
+
+
+test("fresh 3D starts clear held controls and residual motion before the first frame", () => {
+  assert.match(engine, /function start\(\)[\s\S]*?controls = \{ steer: 0, throttle: false, brake: false, boost: false \};[\s\S]*?carBody\.setLinvel\(\{ x: 0, y: 0, z: 0 \}, true\);[\s\S]*?carBody\.setAngvel\(\{ x: 0, y: 0, z: 0 \}, true\);[\s\S]*?frameId = requestAnimationFrame\(frame\)/);
+});
+
+test("longitudinal speed limiting caps forward and reverse speed without erasing lateral drift", () => {
+  assert.deepEqual(clampLongitudinalVelocity({
+    velocity: { x: 0, y: 1.5, z: -30 }, forward: { x: 0, z: -1 }, speedLimit: 20
+  }), { x: 0, y: 1.5, z: -20 });
+  assert.deepEqual(clampLongitudinalVelocity({
+    velocity: { x: 0, y: 0, z: 30 }, forward: { x: 0, z: -1 }, speedLimit: 20
+  }), { x: 0, y: 0, z: 20 });
+  assert.deepEqual(clampLongitudinalVelocity({
+    velocity: { x: 8, y: 0, z: -30 }, forward: { x: 0, z: -1 }, speedLimit: 20
+  }), { x: 8, y: 0, z: -20 });
+  assert.deepEqual(clampLongitudinalVelocity({
+    velocity: { x: 4, y: 2, z: -10 }, forward: { x: 0, z: -1 }, speedLimit: 20
+  }), { x: 4, y: 2, z: -10 });
+  assert.deepEqual(clampLongitudinalVelocity({
+    velocity: { x: 8, y: 2, z: -30 }, forward: { x: 0, z: 0 }, speedLimit: 20
+  }), { x: 8, y: 2, z: -30 });
+  assert.deepEqual(clampLongitudinalVelocity({
+    velocity: { x: 8, y: 2, z: -30 }, forward: { x: 0, z: -1 }, speedLimit: Number.NaN
+  }), { x: 0, y: 0, z: 0 });
+  assert.match(engine, /const limited = clampLongitudinalVelocity\(\{ velocity, forward, speedLimit \}\)/);
+});
+
+test("fresh-start safety remains separate from pause and resume lifecycle", () => {
+  assert.match(engine, /function start\(\)[\s\S]*?controls = \{ steer: 0, throttle: false, brake: false, boost: false \}/);
+  assert.match(engine, /function resume\(\) \{ if \(disposed \|\| gameOver\) return; running = true; paused = false; lastFrame = 0;/);
 });
