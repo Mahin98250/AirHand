@@ -212,3 +212,15 @@ test("Air Drive receives the corrected steering direction and polished HUD styli
   assert.ok(html.includes(".drive-hud b{font-variant-numeric:tabular-nums"));
   assert.ok(html.includes("prefers-reduced-motion:reduce"));
 });
+
+
+test("stationary Air Drive launch and responsive design are connected", () => {
+  assert.match(app, /const activeRun = drive\.playing && !drive\.paused && !drive\.crashed/);
+  assert.match(app, /drive\.cruise = false/);
+  assert.match(app, /const DRIVE_PEDAL_CONFIRM_MS = 170/);
+  assert.match(html, /airhand-20261016-stable-drive-2/);
+  assert.match(html, /AirHand layout refinement/);
+  assert.match(html, /Start stationary\. Cruise control is off by default/);
+  assert.match(steering, /lastUpdateAt = 0/);
+  assert.match(steering, /missingFor <= 90/);
+});
